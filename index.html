@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { background: #0d0f14; font-family: system-ui, -apple-system, sans-serif; }
+    html, body { background: #060f26; font-family: system-ui, -apple-system, sans-serif; min-height: 100vh; }
     #root { max-width: 960px; margin: 0 auto; padding: 0; }
     .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
   </style>
@@ -18,11 +18,11 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script type="text/babel">
-    const { useState, useEffect, useMemo, useRef } = React;
+    const { useState, useEffect } = React;
 
 
 const STORAGE_KEY = "family-birthdays-members";
-const STORAGE_VERSION = "v7";
+const STORAGE_VERSION = "v11";
 const VERSION_KEY = "family-birthdays-version";
 
 const DEFAULT_MEMBERS = [
@@ -39,22 +39,56 @@ const DEFAULT_MEMBERS = [
   { id:11, name:"Toffee",    role:"Goodest girl · cutest puppy · goddess", birthdate:"2020-12-08", imageUrl:null, parentId:5, parent2Id:6, spouseId:null },
 ];
 
-// ── Design tokens ─────────────────────────────────────────────────────────────
+// ── Swedish Flag Frost design tokens ─────────────────────────────────────────
 const D = {
-  bg0:"#0d0f14", bg1:"#13161e", bg2:"#1a1e2a", bg3:"#222636",
-  border:"#ffffff14", borderHi:"#ffffff28",
-  text1:"#f0f2f8", text2:"#8b91a8", text3:"#555c78",
-  accent:"#7c6fef", heart:"#f472b6", line:"#2d3248",
-  green:"#34d399", amber:"#fbbf24", red:"#f87171",
+  // Backgrounds — midnight navy to deep blue
+  bg0:      "#060f26",   // page / outermost bg
+  bg1:      "#0b1a38",   // card surface
+  bg2:      "#0f2248",   // input / row bg
+  bg3:      "#162d5c",   // hover / subtle surface
+  bgGlass:  "#0d1f4299", // semi-transparent glass for panels
+
+  // Borders
+  border:   "#4a90e222", // icy blue tint border
+  borderHi: "#4a90e244",
+  borderGold: "#f5c84233",
+
+  // Text — always readable on dark navy
+  text1: "#e8f0fe",   // primary — bright ice white
+  text2: "#8aafd4",   // secondary — cool blue-grey
+  text3: "#4a6d99",   // muted
+
+  // Brand colours — Swedish palette
+  gold:   "#f5c842",   // Swedish yellow/gold
+  goldLo: "#f5c84218",
+  blue:   "#3a8de8",   // Swedish blue (accent)
+  blueLo: "#3a8de818",
+  ice:    "#b0d0ff",   // icy highlight
+  iceLo:  "#b0d0ff14",
+
+  // Semantic
+  accent:  "#3a8de8",
+  heart:   "#f5c842",  // gold hearts in tree (Swedish cross colour)
+  line:    "#f5c84255",  // tree connector lines (gold)
+  red:     "#f87171",
+  green:   "#34d399",
 };
 
+// ── Per-member palette — cool blues + gold ─────────────────────────────────
 const PALETTE = [
-  {fg:"#a78bfa",bg:"#a78bfa18"},{fg:"#34d399",bg:"#34d39918"},
-  {fg:"#fb923c",bg:"#fb923c18"},{fg:"#f472b6",bg:"#f472b618"},
-  {fg:"#60a5fa",bg:"#60a5fa18"},{fg:"#a3e635",bg:"#a3e63518"},
-  {fg:"#facc15",bg:"#facc1518"},{fg:"#f87171",bg:"#f8717118"},
+  {fg:"#60a5fa", bg:"#60a5fa18"}, // blue       — Helene   (id 1)
+  {fg:"#7dd3fc", bg:"#7dd3fc18"}, // sky        — Stein    (id 2)
+  {fg:"#34d399", bg:"#34d39918"}, // teal       — Thomas   (id 3)
+  {fg:"#67e8f9", bg:"#67e8f918"}, // cyan       — Anita    (id 4)
+  {fg:"#a78bfa", bg:"#a78bfa18"}, // violet     — Gabriella(id 5)
+  {fg:"#c084fc", bg:"#c084fc18"}, // purple     — Andreas  (id 6)
+  {fg:"#f472b6", bg:"#f472b618"}, // pink       — Olivia   (id 7)
+  {fg:"#fb923c", bg:"#fb923c18"}, // orange     — LUCAS    (id 8)
+  {fg:"#fbbf24", bg:"#fbbf2418"}, // amber      — Liam     (id 9)
+  {fg:"#4ade80", bg:"#4ade8018"}, // green      — Noah     (id 10)
+  {fg:"#e879f9", bg:"#e879f918"}, // fuchsia    — Toffee   (id 11)
 ];
-function palFor(name) { return PALETTE[(name.charCodeAt(0)||0) % PALETTE.length]; }
+function palFor(member) { return PALETTE[(member.id - 1) % PALETTE.length]; }
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 function parseDate(s) {
@@ -100,14 +134,75 @@ function useCountdown(b) {
   };
 }
 
+// ── Snowflake SVG (reusable) ──────────────────────────────────────────────────
+function Snowflake({ x, y, r, opacity=0.5 }) {
+  const arms = [0,45,90,135];
+  return (
+    <g transform={`translate(${x},${y})`} opacity={opacity}>
+      {arms.map(a => (
+        <g key={a} transform={`rotate(${a})`}>
+          <line x1="0" y1={-r} x2="0" y2={r} stroke="#a8c8ff" strokeWidth="0.8"/>
+          <line x1={-r*0.4} y1={-r*0.55} x2="0" y2={-r*0.7} stroke="#a8c8ff" strokeWidth="0.6"/>
+          <line x1={r*0.4}  y1={-r*0.55} x2="0" y2={-r*0.7} stroke="#a8c8ff" strokeWidth="0.6"/>
+        </g>
+      ))}
+      <circle cx="0" cy="0" r={r*0.18} fill="#c8e0ff"/>
+    </g>
+  );
+}
+
+// ── Background: Swedish Flag Frost ────────────────────────────────────────────
+function FrostBackground() {
+  return (
+    <div style={{
+      position:"fixed", inset:0, zIndex:0, overflow:"hidden", pointerEvents:"none",
+    }}>
+      <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+        {/* Base deep navy */}
+        <rect width="100%" height="100%" fill="#060f26"/>
+
+        {/* Swedish cross bands — horizontal */}
+        <rect x="0" y="38%" width="100%" height="12%" fill="#0a3a8a" opacity="0.28"/>
+        {/* Swedish cross bands — vertical */}
+        <rect x="30%" y="0" width="8%" height="100%" fill="#0a3a8a" opacity="0.28"/>
+
+        {/* Gold cross inner glow lines */}
+        <rect x="0" y="43%" width="100%" height="2%" fill="#f5c842" opacity="0.07"/>
+        <rect x="33%" y="0" width="2%" height="100%" fill="#f5c842" opacity="0.07"/>
+
+        {/* Subtle radial light from cross centre */}
+        <ellipse cx="34%" cy="44%" rx="40%" ry="30%" fill="#1a5aaa" opacity="0.07"/>
+
+        {/* Snowflakes — scattered naturally */}
+        <Snowflake x="8%"  y="12%" r={18} opacity={0.45}/>
+        <Snowflake x="72%" y="8%"  r={14} opacity={0.35}/>
+        <Snowflake x="88%" y="30%" r={22} opacity={0.4}/>
+        <Snowflake x="15%" y="65%" r={16} opacity={0.35}/>
+        <Snowflake x="55%" y="72%" r={26} opacity={0.3}/>
+        <Snowflake x="92%" y="78%" r={18} opacity={0.38}/>
+        <Snowflake x="42%" y="18%" r={12} opacity={0.3}/>
+        <Snowflake x="3%"  y="88%" r={14} opacity={0.32}/>
+        <Snowflake x="78%" y="92%" r={16} opacity={0.28}/>
+        <Snowflake x="62%" y="45%" r={10} opacity={0.22}/>
+        <Snowflake x="22%" y="36%" r={8}  opacity={0.2}/>
+
+        {/* Frost speck dots */}
+        {[[12,22],[28,78],[48,55],[66,15],[82,60],[95,42],[35,90],[20,50]].map(([px,py],i)=>(
+          <circle key={i} cx={`${px}%`} cy={`${py}%`} r="1.5" fill="#a8c8ff" opacity="0.3"/>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
 // ── Avatar ────────────────────────────────────────────────────────────────────
 function Avatar({ member, size=56 }) {
-  const { fg, bg } = palFor(member.name);
+  const { fg, bg } = palFor(member);
   return (
     <div style={{
       width:size, height:size, borderRadius:"50%",
       background: member.imageUrl ? "transparent" : bg,
-      border:`2px solid ${fg}55`,
+      border:`2px solid ${fg}66`,
       display:"flex", alignItems:"center", justifyContent:"center",
       overflow:"hidden", flexShrink:0,
     }}>
@@ -126,7 +221,7 @@ function BirthdayCard({ member, onEdit, onDelete }) {
   const soon  = days !== null && days <= 30;
   const today = days === 0;
   const age   = calcAge(member.birthdate);
-  const { fg } = palFor(member.name);
+  const { fg } = palFor(member);
   const cd = useCountdown(member.birthdate);
   const [hov, setHov] = useState(false);
 
@@ -135,22 +230,28 @@ function BirthdayCard({ member, onEdit, onDelete }) {
       onMouseEnter={()=>setHov(true)}
       onMouseLeave={()=>setHov(false)}
       style={{
-        background:D.bg1, borderRadius:16,
-        border: soon ? `1px solid ${fg}55` : `1px solid ${D.border}`,
+        background: hov ? D.bg3 : D.bg1,
+        borderRadius:16,
+        border: soon ? `1px solid ${D.gold}55` : `1px solid ${D.border}`,
         padding:"20px 18px 16px",
         display:"flex", flexDirection:"column", alignItems:"center",
         position:"relative", overflow:"hidden",
-        transition:"transform 0.18s ease",
+        transition:"transform 0.18s ease, background 0.18s ease",
         transform: hov ? "translateY(-4px)" : "none",
+        backdropFilter:"blur(12px)",
       }}
     >
-      {soon && <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:`linear-gradient(90deg,transparent,${fg},transparent)`,borderRadius:"16px 16px 0 0"}}/>}
+      {/* Gold top-edge shimmer on upcoming */}
+      {soon && <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:`linear-gradient(90deg,transparent,${D.gold},transparent)`}}/>}
+
+      {/* Upcoming badge */}
       {soon && (
         <div style={{
           position:"absolute",top:12,right:12,
-          background: today ? fg : `${fg}22`, color: today ? "#0d0f14" : fg,
+          background: today ? D.gold : D.goldLo,
+          color: today ? D.bg0 : D.gold,
           fontSize:10,fontWeight:600,padding:"3px 9px",borderRadius:99,
-          border: today?"none":`1px solid ${fg}44`,
+          border: today?"none":`1px solid ${D.gold}55`,
           letterSpacing:"0.05em",textTransform:"uppercase",
           animation:today?"todaypulse 2s ease-in-out infinite":"none",
         }}>
@@ -158,6 +259,7 @@ function BirthdayCard({ member, onEdit, onDelete }) {
         </div>
       )}
 
+      {/* Avatar + age */}
       <div style={{position:"relative",marginBottom:14}}>
         <Avatar member={member} size={72}/>
         {age !== null && (
@@ -176,6 +278,7 @@ function BirthdayCard({ member, onEdit, onDelete }) {
         color:fg, background:`${fg}18`,
         padding:"3px 10px",borderRadius:99,marginBottom:16,
         maxWidth:"92%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
+        border:`1px solid ${fg}22`,
       }} title={member.role}>{member.role}</div>
 
       <div style={{width:"100%",display:"flex",flexDirection:"column",gap:6}}>
@@ -187,9 +290,11 @@ function BirthdayCard({ member, onEdit, onDelete }) {
             <span style={{color:D.text2,display:"flex",alignItems:"center",gap:7,fontSize:12}}>
               <i className={`ti ${icon}`} style={{fontSize:13,color:D.text3}} aria-hidden="true"/> {label}
             </span>
-            <span style={{fontSize:12,fontWeight:500,color:hi?fg:D.text1}}>{val}</span>
+            <span style={{fontSize:12,fontWeight:500,color:hi?D.gold:D.text1}}>{val}</span>
           </div>
         ))}
+
+        {/* Countdown */}
         <div style={{padding:"10px 12px",background:D.bg2,borderRadius:10,border:`1px solid ${D.border}`}}>
           <div style={{fontSize:10,color:D.text3,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:8,display:"flex",alignItems:"center",gap:5}}>
             <i className="ti ti-clock" style={{fontSize:12}} aria-hidden="true"/> Countdown
@@ -197,7 +302,7 @@ function BirthdayCard({ member, onEdit, onDelete }) {
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
             {[["Days",cd.days],["Hrs",cd.hours],["Min",cd.minutes],["Sec",cd.seconds]].map(([lbl,val])=>(
               <div key={lbl} style={{textAlign:"center",background:D.bg3,borderRadius:8,padding:"7px 4px",border:`1px solid ${D.border}`}}>
-                <div style={{fontSize:16,fontWeight:500,color:D.text1,lineHeight:1.2,fontVariantNumeric:"tabular-nums"}}>{String(val).padStart(2,"0")}</div>
+                <div style={{fontSize:16,fontWeight:500,color:D.ice,lineHeight:1.2,fontVariantNumeric:"tabular-nums"}}>{String(val).padStart(2,"0")}</div>
                 <div style={{fontSize:9,color:D.text3,textTransform:"uppercase",letterSpacing:"0.06em",marginTop:2}}>{lbl}</div>
               </div>
             ))}
@@ -205,15 +310,16 @@ function BirthdayCard({ member, onEdit, onDelete }) {
         </div>
       </div>
 
+      {/* Action buttons */}
       <div style={{display:"flex",gap:8,marginTop:14,width:"100%"}}>
         {[
-          {label:"Edit", icon:"ti-edit", onClick:()=>onEdit(member), danger:false},
-          {label:"Remove", icon:"ti-trash", onClick:()=>{ if(confirm(`Remove ${member.name}?`)) onDelete(member.id); }, danger:true},
-        ].map(({label,icon,onClick,danger})=>(
+          {label:"Edit",   icon:"ti-edit",  danger:false, onClick:()=>onEdit(member)},
+          {label:"Remove", icon:"ti-trash", danger:true,  onClick:()=>{ if(confirm(`Remove ${member.name}?`)) onDelete(member.id); }},
+        ].map(({label,icon,danger,onClick})=>(
           <button key={label} onClick={onClick}
-            style={{flex:1,padding:"7px",fontSize:12,border:`1px solid ${D.borderHi}`,borderRadius:8,cursor:"pointer",background:"transparent",color:D.text2,display:"flex",alignItems:"center",justifyContent:"center",gap:5,transition:"background 0.12s,color 0.12s"}}
-            onMouseEnter={e=>{e.currentTarget.style.background=danger?"#f8717118":D.bg3;e.currentTarget.style.color=danger?D.red:D.text1;}}
-            onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=D.text2;}}
+            style={{flex:1,padding:"7px",fontSize:12,border:`1px solid ${D.borderHi}`,borderRadius:8,cursor:"pointer",background:"transparent",color:D.text2,display:"flex",alignItems:"center",justifyContent:"center",gap:5,transition:"background 0.12s,color 0.12s,border-color 0.12s"}}
+            onMouseEnter={e=>{e.currentTarget.style.background=danger?"#f8717118":D.blueLo;e.currentTarget.style.color=danger?D.red:D.ice;e.currentTarget.style.borderColor=danger?"#f8717155":D.borderHi;}}
+            onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=D.text2;e.currentTarget.style.borderColor=D.borderHi;}}
           >
             <i className={`ti ${icon}`} style={{fontSize:13}} aria-hidden="true"/> {label}
           </button>
@@ -235,17 +341,22 @@ function MemberForm({ initial, onSave, onCancel }) {
     if (!form.birthdate)   { setErr("Birthdate is required"); return; }
     onSave(form);
   };
-  const field = {display:"block",width:"100%",boxSizing:"border-box",padding:"9px 12px",fontSize:14,border:`1px solid ${D.borderHi}`,borderRadius:8,background:D.bg2,color:D.text1,marginTop:5,outline:"none"};
-  const label = {fontSize:12,color:D.text2,display:"block",marginTop:14,fontWeight:500,letterSpacing:"0.03em"};
+  const field = {
+    display:"block",width:"100%",boxSizing:"border-box",
+    padding:"9px 12px",fontSize:14,
+    border:`1px solid ${D.borderHi}`,borderRadius:8,
+    background:D.bg2,color:D.text1,marginTop:5,outline:"none",
+  };
+  const lbl = {fontSize:12,color:D.text2,display:"block",marginTop:14,fontWeight:500,letterSpacing:"0.03em"};
   return (
     <form onSubmit={submit}>
       {err && <div style={{color:D.red,fontSize:12,marginBottom:8,padding:"8px 12px",background:"#f8717118",borderRadius:8}}>{err}</div>}
-      <label style={label}>Name *<input value={form.name} onChange={e=>set("name",e.target.value)} style={field} placeholder="e.g. Grandpa Joe"/></label>
-      <label style={label}>Role *<input value={form.role} onChange={e=>set("role",e.target.value)} style={field} placeholder="e.g. Grandfather"/></label>
-      <label style={label}>Date of birth *<input type="date" value={form.birthdate} onChange={e=>set("birthdate",e.target.value)} style={{...field,colorScheme:"dark"}}/></label>
-      <label style={label}>Photo URL (optional)<input value={form.imageUrl} onChange={e=>set("imageUrl",e.target.value)} style={field} placeholder="https://..."/></label>
+      <label style={lbl}>Name *<input value={form.name} onChange={e=>set("name",e.target.value)} style={field} placeholder="e.g. Grandpa Joe"/></label>
+      <label style={lbl}>Role *<input value={form.role} onChange={e=>set("role",e.target.value)} style={field} placeholder="e.g. Grandfather"/></label>
+      <label style={lbl}>Date of birth *<input type="date" value={form.birthdate} onChange={e=>set("birthdate",e.target.value)} style={{...field,colorScheme:"dark"}}/></label>
+      <label style={lbl}>Photo URL (optional)<input value={form.imageUrl} onChange={e=>set("imageUrl",e.target.value)} style={field} placeholder="https://..."/></label>
       <div style={{display:"flex",gap:8,marginTop:20}}>
-        <button type="submit" style={{flex:1,padding:"9px",background:D.accent,color:"#fff",border:"none",borderRadius:8,cursor:"pointer",fontSize:14,fontWeight:500}}>
+        <button type="submit" style={{flex:1,padding:"9px",background:D.blue,color:"#fff",border:"none",borderRadius:8,cursor:"pointer",fontSize:14,fontWeight:500}}>
           {initial ? "Save changes" : "Add member"}
         </button>
         <button type="button" onClick={onCancel} style={{flex:1,padding:"9px",background:"transparent",border:`1px solid ${D.borderHi}`,borderRadius:8,cursor:"pointer",fontSize:14,color:D.text2}}>
@@ -260,16 +371,23 @@ function MemberForm({ initial, onSave, onCancel }) {
 function Modal({ title, subtitle, children, onClose }) {
   return (
     <div
-      style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.72)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:16,backdropFilter:"blur(6px)"}}
+      style={{position:"fixed",inset:0,background:"rgba(2,8,24,0.82)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:16,backdropFilter:"blur(8px)"}}
       onClick={e=>e.target===e.currentTarget&&onClose()}
     >
-      <div style={{background:D.bg1,borderRadius:16,border:`1px solid ${D.borderHi}`,padding:"22px 22px 26px",width:"100%",maxWidth:400,maxHeight:"90vh",overflowY:"auto"}}>
+      <div style={{
+        background:D.bg1,borderRadius:16,
+        border:`1px solid ${D.borderGold}`,
+        boxShadow:`0 0 0 1px ${D.border}`,
+        padding:"22px 22px 26px",width:"100%",maxWidth:400,maxHeight:"90vh",overflowY:"auto",
+      }}>
+        {/* Gold top rule */}
+        <div style={{position:"absolute",top:0,left:"10%",right:"10%",height:1,background:`linear-gradient(90deg,transparent,${D.gold}66,transparent)`,borderRadius:4}}/>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:subtitle?12:18}}>
           <div>
             <div style={{fontSize:16,fontWeight:500,color:D.text1}}>{title}</div>
             {subtitle && <div style={{fontSize:12,color:D.text3,marginTop:3}}>{subtitle}</div>}
           </div>
-          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:D.text3,fontSize:20,lineHeight:1,padding:4,flexShrink:0}}
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:D.text3,fontSize:20,lineHeight:1,padding:4}}
             onMouseEnter={e=>e.currentTarget.style.color=D.text1}
             onMouseLeave={e=>e.currentTarget.style.color=D.text3}>
             <i className="ti ti-x" aria-hidden="true"/>
@@ -282,37 +400,23 @@ function Modal({ title, subtitle, children, onClose }) {
 }
 
 // ── Link Type Picker ──────────────────────────────────────────────────────────
-// Shown when a tree node is clicked. Lets the user choose Parent / Child / Spouse
-// before proceeding to the member creation form.
-function LinkPicker({ anchor, onPick, onClose }) {
-  const { fg } = palFor(anchor.name);
+function LinkPicker({ anchor, onPick, onRemove, onClose }) {
   const options = [
-    { type:"parent",  icon:"ti-arrow-up",    label:"Add a parent",  desc:`Someone who is a parent of ${anchor.name}` },
-    { type:"child",   icon:"ti-arrow-down",  label:"Add a child",   desc:`Someone whose parent is ${anchor.name}` },
-    { type:"spouse",  icon:"ti-heart",       label:"Add a spouse",  desc:`Someone married to ${anchor.name}` },
+    { type:"parent", icon:"ti-arrow-up",   label:"Add a parent",  desc:`Someone who is a parent of ${anchor.name}` },
+    { type:"child",  icon:"ti-arrow-down", label:"Add a child",   desc:`Someone whose parent is ${anchor.name}` },
+    { type:"spouse", icon:"ti-heart",      label:"Add a spouse",  desc:`Someone married to ${anchor.name}` },
   ];
   return (
-    <Modal title={`Add relative to ${anchor.name}`} subtitle="Choose the relationship first" onClose={onClose}>
+    <Modal title={anchor.name} subtitle="Add a relative or remove this member" onClose={onClose}>
       <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:4}}>
         {options.map(({type,icon,label,desc})=>(
           <button key={type} onClick={()=>onPick(type)}
-            style={{
-              display:"flex",alignItems:"center",gap:14,
-              padding:"14px 16px",
-              background:D.bg2, border:`1px solid ${D.borderHi}`,
-              borderRadius:12, cursor:"pointer", textAlign:"left",
-              transition:"border-color 0.15s, background 0.15s",
-            }}
-            onMouseEnter={e=>{e.currentTarget.style.borderColor=`${fg}66`;e.currentTarget.style.background=D.bg3;}}
+            style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",background:D.bg2,border:`1px solid ${D.borderHi}`,borderRadius:12,cursor:"pointer",textAlign:"left",transition:"border-color 0.15s,background 0.15s"}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=`${D.gold}66`;e.currentTarget.style.background=D.bg3;}}
             onMouseLeave={e=>{e.currentTarget.style.borderColor=D.borderHi;e.currentTarget.style.background=D.bg2;}}
           >
-            <div style={{
-              width:38,height:38,borderRadius:10,
-              background:`${fg}18`,border:`1px solid ${fg}44`,
-              display:"flex",alignItems:"center",justifyContent:"center",
-              flexShrink:0,
-            }}>
-              <i className={`ti ${icon}`} style={{fontSize:18,color:fg}} aria-hidden="true"/>
+            <div style={{width:38,height:38,borderRadius:10,background:D.goldLo,border:`1px solid ${D.gold}44`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <i className={`ti ${icon}`} style={{fontSize:18,color:D.gold}} aria-hidden="true"/>
             </div>
             <div>
               <div style={{fontSize:14,fontWeight:500,color:D.text1}}>{label}</div>
@@ -321,15 +425,33 @@ function LinkPicker({ anchor, onPick, onClose }) {
             <i className="ti ti-chevron-right" style={{fontSize:14,color:D.text3,marginLeft:"auto"}} aria-hidden="true"/>
           </button>
         ))}
+
+        {/* Divider */}
+        <div style={{height:1,background:D.borderHi,margin:"4px 0"}}/>
+
+        {/* Remove button */}
+        <button onClick={onRemove}
+          style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",background:D.bg2,border:`1px solid ${D.borderHi}`,borderRadius:12,cursor:"pointer",textAlign:"left",transition:"border-color 0.15s,background 0.15s"}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor="#f8717166";e.currentTarget.style.background="#f8717112";}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor=D.borderHi;e.currentTarget.style.background=D.bg2;}}
+        >
+          <div style={{width:38,height:38,borderRadius:10,background:"#f8717118",border:"1px solid #f8717144",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <i className="ti ti-trash" style={{fontSize:18,color:D.red}} aria-hidden="true"/>
+          </div>
+          <div>
+            <div style={{fontSize:14,fontWeight:500,color:D.red}}>Remove member</div>
+            <div style={{fontSize:11,color:D.text3,marginTop:2}}>{`Remove ${anchor.name} from the family`}</div>
+          </div>
+        </button>
       </div>
     </Modal>
   );
 }
 
 // ── Tree node card ────────────────────────────────────────────────────────────
-function TreeNode({ member, highlight, onClick }) {
+function TreeNode({ member, highlight, onClick, spouseName }) {
   const age = calcAge(member.birthdate);
-  const { fg, bg } = palFor(member.name);
+  const { fg, bg } = palFor(member);
   const [hov, setHov] = useState(false);
   return (
     <div
@@ -339,96 +461,571 @@ function TreeNode({ member, highlight, onClick }) {
       title="Click to add a relative"
       style={{
         background: hov ? D.bg3 : D.bg1,
-        border: highlight ? `1px solid ${fg}88` : hov ? `1px solid ${fg}55` : `1px solid ${D.border}`,
+        border: highlight
+          ? `1px solid ${D.gold}88`
+          : hov ? `1px solid ${D.blue}88` : `1px solid ${D.border}`,
         borderRadius:12,
         padding:"10px 8px 9px",
         width:110, textAlign:"center",
         display:"inline-flex", flexDirection:"column", alignItems:"center",
         position:"relative", cursor:"pointer",
-        transition:"background 0.15s, border-color 0.15s, transform 0.15s",
+        transition:"background 0.15s,border-color 0.15s,transform 0.15s",
         transform: hov ? "translateY(-2px)" : "none",
+        backdropFilter:"blur(8px)",
       }}
     >
-      {highlight && <div style={{position:"absolute",top:0,left:"10%",right:"10%",height:1,background:`linear-gradient(90deg,transparent,${fg},transparent)`}}/>}
-      {/* + indicator on hover */}
-      <div style={{
-        position:"absolute",top:-8,right:-8,
-        width:18,height:18,borderRadius:"50%",
-        background:D.accent,border:`2px solid ${D.bg0}`,
-        display:"flex",alignItems:"center",justifyContent:"center",
-        opacity: hov ? 1 : 0, transition:"opacity 0.15s",
-        fontSize:12,color:"#fff",fontWeight:700,lineHeight:1,
-      }}>+</div>
+      {highlight && <div style={{position:"absolute",top:0,left:"10%",right:"10%",height:1,background:`linear-gradient(90deg,transparent,${D.gold},transparent)`}}/>}
+      <div style={{position:"absolute",top:-8,right:-8,width:18,height:18,borderRadius:"50%",background:D.blue,border:`2px solid ${D.bg0}`,display:"flex",alignItems:"center",justifyContent:"center",opacity:hov?1:0,transition:"opacity 0.15s",fontSize:12,color:"#fff",fontWeight:700,lineHeight:1}}>+</div>
       <Avatar member={member} size={40}/>
       <div style={{fontSize:12,fontWeight:500,color:D.text1,marginTop:7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:94}} title={member.name}>{member.name}</div>
       <div style={{fontSize:10,color:D.text2,marginTop:2}}>{age !== null ? `${age} yrs` : "—"}</div>
       <div style={{fontSize:9,color:fg,marginTop:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:94,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.05em",background:bg,padding:"2px 6px",borderRadius:99}} title={member.role}>{member.role}</div>
+      {spouseName && (
+        <div style={{display:"flex",alignItems:"center",gap:3,marginTop:5}}>
+          <span style={{color:D.gold,fontSize:10}}>♥</span>
+          <span style={{fontSize:10,color:D.gold,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:70}} title={spouseName}>{spouseName}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Tree builder ─────────────────────────────────────────────────────────────
+// Each unit = { member, spouse (inline, same-root only), spouseName (cross-branch),
+//               childNodes: unit[], depth }
+// Cross-branch spouses (different parents) stay separate under their own parents
+// and show "♥ Name" labels instead. Children attach to the lower-id parent only.
+
+function buildTree(members) {
+  const byId = Object.fromEntries(members.map(m => [m.id, m]));
+
+  // Find which root branch each member belongs to
+  function findRoot(m) {
+    const visited = new Set();
+    let cur = m;
+    while (cur) {
+      if (visited.has(cur.id)) break;
+      visited.add(cur.id);
+      const p = cur.parentId != null ? byId[cur.parentId] : null;
+      if (!p) return cur.id;
+      cur = p;
+    }
+    return m.id;
+  }
+  const rootOf = {};
+  members.forEach(m => { rootOf[m.id] = findRoot(m); });
+
+  // Determine if two spouses share a root branch
+  function sameRoot(a, b) { return rootOf[a.id] === rootOf[b.id]; }
+
+  // Build units
+  const unitOf = {};
+  const units = [];
+  const assigned = new Set();
+
+  members.slice().sort((a,b) => a.id - b.id).forEach(m => {
+    if (assigned.has(m.id)) return;
+    assigned.add(m.id);
+
+    let spouse = null;
+    let crossSpouseName = null;
+    if (m.spouseId != null && byId[m.spouseId]) {
+      const s = byId[m.spouseId];
+      const bothHaveParents =
+        (m.parentId != null && byId[m.parentId]) &&
+        (s.parentId != null && byId[s.parentId]);
+      if (bothHaveParents && !sameRoot(m, s)) {
+        // Cross-branch: don't merge, just label
+        crossSpouseName = s.name;
+      } else if (!assigned.has(s.id)) {
+        // Same branch or at least one is a root: merge inline
+        spouse = s;
+        assigned.add(s.id);
+      } else {
+        // Spouse already assigned elsewhere
+        crossSpouseName = s.name;
+      }
+    }
+
+    const unit = { member: m, spouse, crossSpouseName, childNodes: [], depth: 0 };
+    unitOf[m.id] = unit;
+    if (spouse) unitOf[spouse.id] = unit;
+    units.push(unit);
+  });
+
+  // Compute depths
+  const depthOf = {};
+  members.forEach(m => {
+    if ((m.parentId == null || !byId[m.parentId]) &&
+        (m.parent2Id == null || !byId[m.parent2Id])) {
+      depthOf[m.id] = 0;
+    }
+  });
+  let changed = true;
+  while (changed) {
+    changed = false;
+    members.forEach(m => {
+      if (depthOf[m.id] != null) return;
+      const pds = [m.parentId, m.parent2Id]
+        .filter(pid => pid != null && depthOf[pid] != null)
+        .map(pid => depthOf[pid]);
+      if (pds.length > 0) { depthOf[m.id] = Math.max(...pds) + 1; changed = true; }
+    });
+  }
+  members.forEach(m => { if (depthOf[m.id] == null) depthOf[m.id] = 0; });
+  units.forEach(u => { u.depth = depthOf[u.member.id]; });
+
+  // Wire children: a member's children attach to the unit containing a parent
+  // For cross-branch couples, children attach to the lower-id parent's unit
+  const childClaimed = new Set(); // track child units to avoid duplication
+  units.forEach(unit => {
+    const pids = new Set([unit.member.id, ...(unit.spouse ? [unit.spouse.id] : [])]);
+    const kidUnits = new Set();
+    members.forEach(m => {
+      if ((m.parentId != null && pids.has(m.parentId)) ||
+          (m.parent2Id != null && pids.has(m.parent2Id))) {
+        const cu = unitOf[m.id];
+        if (cu && cu !== unit && !childClaimed.has(cu)) {
+          kidUnits.add(cu);
+          childClaimed.add(cu);
+        }
+      }
+    });
+    unit.childNodes = [...kidUnits].sort(
+      (a,b) => (parseDate(a.member.birthdate)||0) - (parseDate(b.member.birthdate)||0)
+    );
+  });
+
+  // Also set crossSpouseName on units whose spouse ended up in a different unit
+  units.forEach(unit => {
+    const m = unit.member;
+    if (!unit.spouse && !unit.crossSpouseName && m.spouseId && byId[m.spouseId]) {
+      unit.crossSpouseName = byId[m.spouseId].name;
+    }
+  });
+
+  // Roots = units not claimed as a child
+  return units.filter(u => !childClaimed.has(u));
+}
+
+// ── Couple connector (heart) ──────────────────────────────────────────────────
+function SpouseConnector() {
+  return (
+    <div style={{display:"flex",alignItems:"center",flexShrink:0}}>
+      <div style={{width:12,height:2,background:D.gold}}/>
+      <div style={{
+        width:36,height:36,borderRadius:"50%",
+        background:D.goldLo,border:`2px solid ${D.gold}`,
+        display:"flex",alignItems:"center",justifyContent:"center",
+        fontSize:16,color:"#f87171",flexShrink:0,
+      }}>♥</div>
+      <div style={{width:12,height:2,background:D.gold}}/>
+    </div>
+  );
+}
+
+// ── Recursive tree unit (no children version for linked branches) ─────────────
+function TreeUnitNoKids({ unit, onNodeClick }) {
+  const { member, spouse, crossSpouseName } = unit;
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+      <div style={{display:"flex",alignItems:"center"}}>
+        <TreeNode member={member} highlight onClick={()=>onNodeClick(member)}
+          spouseName={!spouse ? crossSpouseName : null}/>
+        {spouse && <>
+          <SpouseConnector/>
+          <TreeNode member={spouse} highlight onClick={()=>onNodeClick(spouse)}/>
+        </>}
+      </div>
+    </div>
+  );
+}
+
+// ── Standard recursive tree unit ──────────────────────────────────────────────
+function TreeUnit({ unit, onNodeClick, hasChildren }) {
+  const { member, spouse, crossSpouseName, childNodes } = unit;
+  const CARD_W = 110;
+  const GAP = 20;
+  const isHighlighted = hasChildren;
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+      <div style={{display:"flex",alignItems:"center"}}>
+        <TreeNode member={member} highlight={isHighlighted} onClick={()=>onNodeClick(member)}
+          spouseName={!spouse ? crossSpouseName : null}/>
+        {spouse && <>
+          <SpouseConnector large={isHighlighted}/>
+          <TreeNode member={spouse} highlight={isHighlighted} onClick={()=>onNodeClick(spouse)}/>
+        </>}
+      </div>
+      {childNodes.length > 0 && (
+        <>
+          <div style={{width:2,height:28,background:D.gold}}/>
+          {childNodes.length === 1
+            ? <TreeUnit unit={childNodes[0]} onNodeClick={onNodeClick} hasChildren={childNodes[0].childNodes.length>0}/>
+            : (
+              <div style={{position:"relative",display:"flex",gap:GAP,alignItems:"flex-start"}}>
+                <div style={{position:"absolute",top:0,left:CARD_W/2,
+                  width:childNodes.length*CARD_W+(childNodes.length-1)*GAP-CARD_W,
+                  height:2,background:D.gold}}/>
+                {childNodes.map(child => (
+                  <div key={child.member.id} style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+                    <div style={{width:2,height:20,background:D.gold}}/>
+                    <TreeUnit unit={child} onNodeClick={onNodeClick} hasChildren={child.childNodes.length>0}/>
+                  </div>
+                ))}
+              </div>
+            )
+          }
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Children row (shared) ─────────────────────────────────────────────────────
+function ChildrenRow({ childNodes, onNodeClick }) {
+  const CARD_W = 110;
+  const GAP = 20;
+  if (childNodes.length === 0) return null;
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+      <div style={{width:2,height:28,background:D.gold}}/>
+      {childNodes.length === 1
+        ? <TreeUnit unit={childNodes[0]} onNodeClick={onNodeClick} hasChildren={childNodes[0].childNodes.length>0}/>
+        : (
+          <div style={{position:"relative",display:"flex",gap:GAP,alignItems:"flex-start"}}>
+            <div style={{position:"absolute",top:0,left:CARD_W/2,
+              width:childNodes.length*CARD_W+(childNodes.length-1)*GAP-CARD_W,
+              height:2,background:D.gold}}/>
+            {childNodes.map(child => (
+              <div key={child.member.id} style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+                <div style={{width:2,height:20,background:D.gold}}/>
+                <TreeUnit unit={child} onNodeClick={onNodeClick} hasChildren={child.childNodes.length>0}/>
+              </div>
+            ))}
+          </div>
+        )
+      }
+    </div>
+  );
+}
+
+// ── Render a vertical branch chain ─────────────────────────────────────────────
+// Renders a path of units vertically (each with spouse connector if applicable),
+// linked by drop lines. Does NOT render children outside the path.
+function BranchChain({ path, onNodeClick }) {
+  if (path.length === 0) return null;
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+      {path.map((unit, idx) => (
+        <div key={unit.member.id} style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+          {idx > 0 && <div style={{width:2,height:28,background:D.gold}}/>}
+          <div style={{display:"flex",alignItems:"center"}}>
+            <TreeNode member={unit.member} onClick={()=>onNodeClick(unit.member)}/>
+            {unit.spouse && <>
+              <SpouseConnector/>
+              <TreeNode member={unit.spouse} onClick={()=>onNodeClick(unit.spouse)}/>
+            </>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Linked branches view ──────────────────────────────────────────────────────
+// Handles cross-branch couples at ANY depth — renders the full chain from each
+// root down to (but not including) the cross-couple member, then connects the
+// couple with a marriage bar and shared children below.
+function LinkedBranchView({ leftRoot, rightRoot, leftChild, rightChild, sharedChildren, onNodeClick }) {
+
+  // Find path from root to target unit (inclusive), via DFS
+  function findPath(root, targetId) {
+    const path = [];
+    function dfs(unit) {
+      path.push(unit);
+      if (unit.member.id === targetId || (unit.spouse && unit.spouse.id === targetId)) return true;
+      for (const child of unit.childNodes) {
+        if (dfs(child)) return true;
+      }
+      path.pop();
+      return false;
+    }
+    dfs(root);
+    return path;
+  }
+
+  const leftPath  = findPath(leftRoot, leftChild.member.id);
+  const rightPath = findPath(rightRoot, rightChild.member.id);
+
+  // Separate chain (ancestors) from the cross-couple members themselves
+  const leftAncestors  = leftPath.slice(0, -1);   // everything above the cross-child
+  const rightAncestors = rightPath.slice(0, -1);
+
+  // Three-row layout with consistent fixed widths.
+  // Row 1: ancestors; Row 2: drop lines; Row 3: cross-couple + heart.
+  // Same section widths in all rows guarantees alignment with no negative-margin tricks.
+  const CARD_W   = 110;
+  const SP_CONN  = 60;           // SpouseConnector visual width (12+36+12)
+  const COUPLE_W = CARD_W + SP_CONN + CARD_W; // 280
+  const HEART_W  = 80;           // width of the big heart connector section
+
+  const leftW  = leftAncestors.length
+    ? Math.max(...leftAncestors.map(u => u.spouse ? COUPLE_W : CARD_W))
+    : CARD_W;
+  const rightW = rightAncestors.length
+    ? Math.max(...rightAncestors.map(u => u.spouse ? COUPLE_W : CARD_W))
+    : CARD_W;
+
+  const totalW = leftW + HEART_W + rightW;
+
+  function renderAncestors(ancestors) {
+    return ancestors.map((unit, idx) => (
+      <div key={unit.member.id} style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+        {idx > 0 && <div style={{width:2,height:28,background:D.gold}}/>}
+        <div style={{display:"flex",alignItems:"center"}}>
+          <TreeNode member={unit.member} onClick={()=>onNodeClick(unit.member)}/>
+          {unit.spouse && <><SpouseConnector/>
+            <TreeNode member={unit.spouse} onClick={()=>onNodeClick(unit.spouse)}/></>}
+        </div>
+      </div>
+    ));
+  }
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+
+      {/* ── Row 1: ancestor couples ── */}
+      {(leftAncestors.length > 0 || rightAncestors.length > 0) && (
+        <div style={{display:"flex",width:totalW}}>
+          <div style={{width:leftW,  display:"flex",flexDirection:"column",alignItems:"center"}}>
+            {renderAncestors(leftAncestors)}
+          </div>
+          <div style={{width:HEART_W}}/>{/* spacer matches heart connector width */}
+          <div style={{width:rightW, display:"flex",flexDirection:"column",alignItems:"center"}}>
+            {renderAncestors(rightAncestors)}
+          </div>
+        </div>
+      )}
+
+      {/* ── Row 2: drop lines from ancestor heart circles ── */}
+      {(leftAncestors.length > 0 || rightAncestors.length > 0) && (
+        <div style={{display:"flex",width:totalW}}>
+          <div style={{width:leftW,  display:"flex",justifyContent:"center"}}>
+            {leftAncestors.length  > 0 && <div style={{width:2,height:90,background:D.gold,marginTop:-40}}/>}
+          </div>
+          <div style={{width:HEART_W}}/>
+          <div style={{width:rightW, display:"flex",justifyContent:"center"}}>
+            {rightAncestors.length > 0 && <div style={{width:2,height:90,background:D.gold,marginTop:-40}}/>}
+          </div>
+        </div>
+      )}
+
+      {/* ── Row 3: cross-couple with big heart connector ── */}
+      <div style={{display:"flex",alignItems:"center",width:totalW}}>
+        {/* Left section: spacer | Gabriella | stub-line-to-edge */}
+        <div style={{width:leftW, display:"flex",alignItems:"center"}}>
+          <div style={{flex:1}}/>
+          <TreeNode member={leftChild.member} highlight onClick={()=>onNodeClick(leftChild.member)}/>
+          <div style={{flex:1,height:2,background:D.gold}}/>
+        </div>
+        {/* Heart connector spans HEART_W */}
+        <div style={{width:HEART_W,display:"flex",alignItems:"center",flexShrink:0}}>
+          <div style={{flex:1,height:2,background:D.gold}}/>
+          <div style={{
+            width:48,height:48,borderRadius:"50%",
+            background:D.goldLo,border:`2.5px solid ${D.gold}`,
+            display:"flex",alignItems:"center",justifyContent:"center",
+            fontSize:22,color:"#f87171",flexShrink:0,
+          }}>♥</div>
+          <div style={{flex:1,height:2,background:D.gold}}/>
+        </div>
+        {/* Right section: stub-line-from-edge | Andreas | spacer */}
+        <div style={{width:rightW,display:"flex",alignItems:"center"}}>
+          <div style={{flex:1,height:2,background:D.gold}}/>
+          <TreeNode member={rightChild.member} highlight onClick={()=>onNodeClick(rightChild.member)}/>
+          <div style={{flex:1}}/>
+        </div>
+      </div>
+
+      {/* ── Shared children ── */}
+      {sharedChildren.length > 0 && (
+        <SharedChildrenRow childNodes={sharedChildren} onNodeClick={onNodeClick} topOffset={36}/>
+      )}
+    </div>
+  );
+}
+
+// Shared children — drop line + horizontal bar + children, all centered
+function SharedChildrenRow({ childNodes, onNodeClick, topOffset=0 }) {
+  const CARD_W = 110;
+  const GAP = 20;
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginTop:-topOffset}}>
+      <div style={{width:2,height:28+topOffset,background:D.gold}}/>
+      {childNodes.length === 1 ? (
+        <TreeUnit unit={childNodes[0]} onNodeClick={onNodeClick} hasChildren={childNodes[0].childNodes.length>0}/>
+      ) : (
+        <div style={{display:"flex",justifyContent:"center"}}>
+          <div style={{position:"relative",display:"inline-flex",gap:GAP,alignItems:"flex-start"}}>
+            <div style={{
+              position:"absolute",top:0,left:CARD_W/2,
+              width:childNodes.length*CARD_W+(childNodes.length-1)*GAP-CARD_W,
+              height:2,background:D.gold,
+            }}/>
+            {childNodes.map(child => (
+              <div key={child.member.id} style={{display:"flex",flexDirection:"column",alignItems:"center",width:CARD_W}}>
+                <div style={{width:2,height:20,background:D.gold}}/>
+                <TreeUnit unit={child} onNodeClick={onNodeClick} hasChildren={child.childNodes.length>0}/>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Couple row + children in a single flex column — guarantees children center
+// aligns with the midpoint of the marriage bar.
+function CoupleWithChildren({ left, right, childNodes, onNodeClick }) {
+  const CARD_W = 110;
+  const GAP = 20;
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+      {/* Couple row */}
+      <div style={{display:"flex",alignItems:"center"}}>
+        <TreeNode member={left} highlight onClick={()=>onNodeClick(left)}/>
+        <SpouseConnector/>
+        <TreeNode member={right} highlight onClick={()=>onNodeClick(right)}/>
+      </div>
+
+      {/* Children */}
+      {childNodes.length > 0 && (
+        <>
+          <div style={{width:2,height:28,background:D.gold}}/>
+          {childNodes.length === 1 ? (
+            <TreeUnit unit={childNodes[0]} onNodeClick={onNodeClick} hasChildren={childNodes[0].childNodes.length>0}/>
+          ) : (
+            <div style={{display:"flex",justifyContent:"center"}}>
+              <div style={{position:"relative",display:"inline-flex",gap:GAP,alignItems:"flex-start"}}>
+                {/* Horizontal bar from center of first to center of last child */}
+                <div style={{
+                  position:"absolute",top:0,
+                  left:CARD_W/2,
+                  width:childNodes.length*CARD_W+(childNodes.length-1)*GAP-CARD_W,
+                  height:2,background:D.gold,
+                }}/>
+                {childNodes.map(child => (
+                  <div key={child.member.id} style={{display:"flex",flexDirection:"column",alignItems:"center",width:CARD_W}}>
+                    <div style={{width:2,height:20,background:D.gold}}/>
+                    <TreeUnit unit={child} onNodeClick={onNodeClick} hasChildren={child.childNodes.length>0}/>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
 
 // ── Family Tree View ──────────────────────────────────────────────────────────
 function FamilyTreeView({ members, onNodeClick }) {
-  const byId = Object.fromEntries(members.map(m=>[m.id,m]));
-  const gabriella = byId[5];
-  const andreas   = byId[6];
-  const gpCouples = members.filter(m=>!m.parentId && m.spouseId && m.id < m.spouseId).map(m=>[m,byId[m.spouseId]]).filter(([,s])=>s);
-  const children  = members.filter(m=>[5,6].includes(m.parentId)||[5,6].includes(m.parent2Id)).sort((a,b)=>(parseDate(a.birthdate)||0)-(parseDate(b.birthdate)||0));
-  const LINE = D.line;
+  const roots = buildTree(members);
+  const byId = Object.fromEntries(members.map(m => [m.id, m]));
+
+  // Collect all units in a flat map by member id
+  const unitMap = {};
+  function mapUnits(u) {
+    unitMap[u.member.id] = u;
+    if (u.spouse) unitMap[u.spouse.id] = u;
+    u.childNodes.forEach(mapUnits);
+  }
+  roots.forEach(mapUnits);
+
+  // Detect linked root pairs: two roots whose child-level units form a cross-couple
+  // A cross-couple: unit A has crossSpouseName pointing to a member in unit B (different root)
+  const linked = new Set();    // root indices that have been linked
+  const linkedGroups = [];     // {leftRoot, rightRoot, leftChild, rightChild, sharedChildren}
+
+  for (let i = 0; i < roots.length; i++) {
+    if (linked.has(i)) continue;
+    for (let j = i + 1; j < roots.length; j++) {
+      if (linked.has(j)) continue;
+
+      // Find all leaf-level units with crossSpouseName in each root
+      function findCrossUnits(root) {
+        const result = [];
+        function walk(u) {
+          if (u.crossSpouseName) result.push(u);
+          u.childNodes.forEach(walk);
+        }
+        walk(root);
+        return result;
+      }
+
+      const crossA = findCrossUnits(roots[i]);
+      const crossB = findCrossUnits(roots[j]);
+
+      // Check if any cross-unit in A points to a member in B's tree and vice versa
+      let match = null;
+      for (const a of crossA) {
+        const aSpouseId = a.member.spouseId;
+        if (!aSpouseId || !unitMap[aSpouseId]) continue;
+        for (const b of crossB) {
+          if (b.member.id === aSpouseId) {
+            // Found a cross-couple between root i and root j
+            const sharedChildren = a.childNodes.length > 0 ? a.childNodes : b.childNodes;
+            match = { leftChild: a, rightChild: b, sharedChildren };
+            break;
+          }
+        }
+        if (match) break;
+      }
+
+      if (match) {
+        linked.add(i);
+        linked.add(j);
+        linkedGroups.push({
+          leftRoot: roots[i],
+          rightRoot: roots[j],
+          leftChild: match.leftChild,
+          rightChild: match.rightChild,
+          sharedChildren: match.sharedChildren,
+        });
+      }
+    }
+  }
+
+  // Unlinked roots render normally
+  const unlinkedRoots = roots.filter((_, idx) => !linked.has(idx));
 
   return (
-    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:0,paddingBottom:24,minWidth:640}}>
-
-      {/* Row 1 — grandparents */}
-      <div style={{display:"flex",gap:72,alignItems:"flex-start",justifyContent:"center"}}>
-        {gpCouples.map(([p,s])=>(
-          <div key={p.id} style={{display:"flex",alignItems:"center",gap:0}}>
-            <TreeNode member={p} onClick={()=>onNodeClick(p)}/>
-            <div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"0 6px"}}>
-              <div style={{width:28,height:1.5,background:`${D.heart}66`}}/>
-              <div style={{width:22,height:22,borderRadius:"50%",background:`${D.heart}18`,border:`1.5px solid ${D.heart}66`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:D.heart,margin:"-11px 0",position:"relative",zIndex:1}}>♥</div>
-              <div style={{width:28,height:1.5,background:`${D.heart}66`}}/>
-            </div>
-            <TreeNode member={s} onClick={()=>onNodeClick(s)}/>
-          </div>
+    <div style={{overflowX:"auto",paddingBottom:24}}>
+      <div style={{display:"flex",gap:56,alignItems:"flex-start",justifyContent:"center",padding:"0 16px",minWidth:"max-content",flexWrap:"wrap"}}>
+        {linkedGroups.map(g => (
+          <LinkedBranchView
+            key={g.leftRoot.member.id}
+            leftRoot={g.leftRoot}
+            rightRoot={g.rightRoot}
+            leftChild={g.leftChild}
+            rightChild={g.rightChild}
+            sharedChildren={g.sharedChildren}
+            onNodeClick={onNodeClick}
+          />
         ))}
-      </div>
-
-      {/* Connector: GPs → parents */}
-      <svg width="600" height="64" style={{display:"block",overflow:"visible",flexShrink:0}}>
-        <line x1="117" y1="0"  x2="117" y2="32" stroke={LINE} strokeWidth="1.5"/>
-        <line x1="117" y1="32" x2="183" y2="32" stroke={LINE} strokeWidth="1.5"/>
-        <line x1="183" y1="32" x2="183" y2="64" stroke={LINE} strokeWidth="1.5"/>
-        <line x1="483" y1="0"  x2="483" y2="32" stroke={LINE} strokeWidth="1.5"/>
-        <line x1="483" y1="32" x2="417" y2="32" stroke={LINE} strokeWidth="1.5"/>
-        <line x1="417" y1="32" x2="417" y2="64" stroke={LINE} strokeWidth="1.5"/>
-      </svg>
-
-      {/* Row 2 — parents couple */}
-      {gabriella && andreas && (
-        <div style={{display:"flex",alignItems:"center"}}>
-          <TreeNode member={gabriella} highlight onClick={()=>onNodeClick(gabriella)}/>
-          <div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"0 8px"}}>
-            <div style={{width:40,height:1.5,background:D.heart}}/>
-            <div style={{width:26,height:26,borderRadius:"50%",background:`${D.heart}22`,border:`2px solid ${D.heart}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:D.heart,margin:"-13px 0",position:"relative",zIndex:1}}>♥</div>
-            <div style={{width:40,height:1.5,background:D.heart}}/>
-          </div>
-          <TreeNode member={andreas} highlight onClick={()=>onNodeClick(andreas)}/>
-        </div>
-      )}
-
-      {/* Connector: parents → children */}
-      <svg width="640" height="52" style={{display:"block",overflow:"visible",flexShrink:0}}>
-        <line x1="320" y1="0"  x2="320" y2="26" stroke={LINE} strokeWidth="1.5"/>
-        <line x1="65"  y1="26" x2="575" y2="26" stroke={LINE} strokeWidth="1.5"/>
-        {[65,195,320,445,575].map(x=>(
-          <line key={x} x1={x} y1="26" x2={x} y2="52" stroke={LINE} strokeWidth="1.5"/>
+        {unlinkedRoots.map(unit => (
+          <TreeUnit
+            key={unit.member.id}
+            unit={unit}
+            onNodeClick={onNodeClick}
+            hasChildren={unit.childNodes.length>0}
+          />
         ))}
-      </svg>
-
-      {/* Row 3 — children */}
-      <div style={{display:"flex",gap:20,alignItems:"flex-start",justifyContent:"center"}}>
-        {children.map(c=><TreeNode key={c.id} member={c} onClick={()=>onNodeClick(c)}/>)}
       </div>
     </div>
   );
@@ -448,25 +1045,17 @@ function App() {
     } catch {}
     return DEFAULT_MEMBERS;
   });
-  const [nextId,   setNextId]   = useState(()=>Math.max(...DEFAULT_MEMBERS.map(m=>m.id))+1);
-  const [view,     setView]     = useState("cards");
-  const [search,   setSearch]   = useState("");
-  const [sortBy,   setSortBy]   = useState("birthday");
-  const [editing,  setEditing]  = useState(null);
-
-  // Tree add-relative flow: anchor = the clicked member, linkType = "parent"|"child"|"spouse"
-  const [treeAnchor,   setTreeAnchor]   = useState(null); // member clicked
-  const [treeLinkType, setTreeLinkType] = useState(null); // chosen relationship
-  // null → nothing open
-  // anchor set, linkType null → show LinkPicker
-  // both set → show MemberForm
+  const [nextId,       setNextId]       = useState(()=>Math.max(...DEFAULT_MEMBERS.map(m=>m.id))+1);
+  const [view,         setView]         = useState("cards");
+  const [search,       setSearch]       = useState("");
+  const [sortBy,       setSortBy]       = useState("birthday");
+  const [editing,      setEditing]      = useState(null);
+  const [treeAnchor,   setTreeAnchor]   = useState(null);
+  const [treeLinkType, setTreeLinkType] = useState(null);
 
   useEffect(()=>{ try { localStorage.setItem(STORAGE_KEY,JSON.stringify(members)); } catch {} },[members]);
 
-  function saveMember(data) {
-    setMembers(ms=>ms.map(m=>m.id===editing.id?{...m,...data}:m));
-    setEditing(null);
-  }
+  function saveMember(data) { setMembers(ms=>ms.map(m=>m.id===editing.id?{...m,...data}:m)); setEditing(null); }
   function deleteMember(id) {
     setMembers(ms=>ms.filter(m=>m.id!==id).map(m=>({...m,
       parentId:m.parentId===id?null:m.parentId,
@@ -474,43 +1063,23 @@ function App() {
       spouseId:m.spouseId===id?null:m.spouseId,
     })));
   }
-
-  // Create a new member and wire up the chosen relationship to the anchor
   function addRelative(data) {
     const newId = nextId;
     const anchor = treeAnchor;
     const linkType = treeLinkType;
-
     let newMember = { id:newId, parentId:null, parent2Id:null, spouseId:null, imageUrl:null, ...data };
     let anchorPatch = {};
-
-    if (linkType === "parent") {
-      // new member is a parent of anchor
-      newMember = { ...newMember }; // new member has no parent changes
-      anchorPatch = { parentId: newId };
-    } else if (linkType === "child") {
-      // new member is a child of anchor
-      newMember = { ...newMember, parentId: anchor.id };
-      // also set parent2Id if anchor has a spouse
-      if (anchor.spouseId) newMember.parent2Id = anchor.spouseId;
-    } else if (linkType === "spouse") {
-      // mutual spouse link
-      newMember = { ...newMember, spouseId: anchor.id };
-      anchorPatch = { spouseId: newId };
-    }
-
+    if (linkType === "parent")       { anchorPatch = { parentId: newId }; }
+    else if (linkType === "child")   { newMember = { ...newMember, parentId:anchor.id, ...(anchor.spouseId ? {parent2Id:anchor.spouseId} : {}) }; }
+    else if (linkType === "spouse")  { newMember = { ...newMember, spouseId:anchor.id }; anchorPatch = { spouseId:newId }; }
     setMembers(ms => {
       const updated = [...ms, newMember];
-      if (Object.keys(anchorPatch).length > 0) {
-        return updated.map(m => m.id === anchor.id ? { ...m, ...anchorPatch } : m);
-      }
-      return updated;
+      return Object.keys(anchorPatch).length > 0 ? updated.map(m=>m.id===anchor.id?{...m,...anchorPatch}:m) : updated;
     });
     setNextId(n=>n+1);
     setTreeAnchor(null);
     setTreeLinkType(null);
   }
-
   function closeTreeFlow() { setTreeAnchor(null); setTreeLinkType(null); }
 
   const filtered = members
@@ -525,16 +1094,15 @@ function App() {
   const TAB = (v,icon,lbl) => (
     <button onClick={()=>setView(v)} style={{
       display:"flex",alignItems:"center",gap:7,padding:"7px 16px",fontSize:13,fontWeight:500,
-      background: view===v ? `${D.accent}22` : "transparent",
-      color: view===v ? D.accent : D.text2,
-      border: view===v ? `1px solid ${D.accent}44` : `1px solid transparent`,
+      background: view===v ? D.blueLo : "transparent",
+      color: view===v ? D.ice : D.text2,
+      border: view===v ? `1px solid ${D.blue}55` : `1px solid transparent`,
       borderRadius:8,cursor:"pointer",transition:"all 0.15s",
     }}>
       <i className={`ti ${icon}`} style={{fontSize:15}} aria-hidden="true"/> {lbl}
     </button>
   );
 
-  // Label shown at the top of the member form when adding a relative
   const addFormTitle = treeAnchor && treeLinkType && {
     parent:  `Add a parent of ${treeAnchor.name}`,
     child:   `Add a child of ${treeAnchor.name}`,
@@ -542,83 +1110,87 @@ function App() {
   }[treeLinkType];
 
   return (
-    <div style={{background:D.bg0,minHeight:600,padding:"24px 20px 32px",fontFamily:"var(--font-sans)",color:D.text1,borderRadius:12}}>
-      <h2 className="sr-only">Family birthday tracker</h2>
+    <div style={{minHeight:600,fontFamily:"var(--font-sans)",color:D.text1,borderRadius:12,position:"relative",overflow:"hidden"}}>
+      <FrostBackground/>
 
-      <style>{`
-        @keyframes todaypulse{0%,100%{opacity:1}50%{opacity:0.55}}
-        .card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
-        input::placeholder{color:${D.text3}}
-        select option{background:${D.bg2};color:${D.text1}}
-      `}</style>
+      {/* Content sits above the background */}
+      <div style={{position:"relative",zIndex:1,padding:"24px 20px 32px"}}>
+        <h2 className="sr-only">Family birthday tracker</h2>
 
-      {/* ── Header ── */}
-      <div style={{display:"flex",flexWrap:"wrap",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:20}}>
-        <div>
-          <div style={{fontSize:24,fontWeight:500,color:D.text1,letterSpacing:"-0.02em",lineHeight:1.2}}>
-            Family <span style={{color:D.accent}}>Birthdays</span>
+        <style>{`
+          @keyframes todaypulse{0%,100%{opacity:1}50%{opacity:0.55}}
+          .card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
+          input::placeholder{color:${D.text3}}
+          select option{background:${D.bg2};color:${D.text1}}
+        `}</style>
+
+        {/* ── Header + Nav (single centered row) ── */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:16,marginBottom:22,flexWrap:"wrap"}}>
+          {/* Swedish cross accent + title */}
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:4,height:28,background:D.gold,borderRadius:2,flexShrink:0}}/>
+            <div style={{width:20,height:4,background:D.gold,borderRadius:2,marginLeft:-6,flexShrink:0}}/>
+            <div style={{fontSize:24,fontWeight:500,color:D.text1,letterSpacing:"-0.02em",lineHeight:1}}>
+              Family <span style={{color:D.gold}}>Birthdays</span>
+            </div>
           </div>
-          <div style={{fontSize:13,color:D.text3,marginTop:4}}>Ages, countdowns &amp; the family tree</div>
+
+          {/* Nav tabs */}
+          <div style={{display:"flex",gap:6,padding:"4px",background:D.bgGlass,backdropFilter:"blur(8px)",borderRadius:10,border:`1px solid ${D.border}`}}>
+            {TAB("cards","ti-users","Birthday cards")}
+            {TAB("tree","ti-hierarchy","Family tree")}
+          </div>
         </div>
-      </div>
 
-      {/* ── Nav tabs ── */}
-      <div style={{display:"flex",gap:6,marginBottom:22,padding:"4px",background:D.bg2,borderRadius:10,width:"fit-content",border:`1px solid ${D.border}`}}>
-        {TAB("cards","ti-users","Birthday cards")}
-        {TAB("tree","ti-hierarchy","Family tree")}
-      </div>
+        {/* ── Cards view ── */}
+        {view==="cards" && (<>
+          <div style={{display:"flex",gap:10,marginBottom:18,flexWrap:"wrap"}}>
+            <div style={{position:"relative",flex:1,minWidth:160}}>
+              <i className="ti ti-search" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",fontSize:14,color:D.text3,pointerEvents:"none"}} aria-hidden="true"/>
+              <input type="text" placeholder="Search name or role…" value={search} onChange={e=>setSearch(e.target.value)}
+                style={{width:"100%",boxSizing:"border-box",padding:"9px 10px 9px 34px",fontSize:13,border:`1px solid ${D.borderHi}`,borderRadius:8,background:D.bgGlass,backdropFilter:"blur(8px)",color:D.text1,outline:"none"}}/>
+            </div>
+            <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{padding:"9px 12px",fontSize:13,border:`1px solid ${D.borderHi}`,borderRadius:8,background:D.bg2,color:D.text1,cursor:"pointer",outline:"none"}}>
+              <option value="birthday">Next birthday</option>
+              <option value="age">Age (oldest first)</option>
+              <option value="ageDesc">Age (youngest first)</option>
+              <option value="name">Name (A–Z)</option>
+            </select>
+          </div>
+          {filtered.length===0 ? (
+            <div style={{textAlign:"center",padding:"56px 16px",color:D.text3}}>
+              <i className="ti ti-users" style={{fontSize:44,display:"block",marginBottom:14}} aria-hidden="true"/>
+              <div style={{fontSize:16,fontWeight:500,color:D.text2,marginBottom:6}}>{search?"No members found":"No family members yet"}</div>
+              <div style={{fontSize:13}}>{search?"Try a different search.":"Go to the Family tree tab and click any member to add relatives."}</div>
+            </div>
+          ) : (
+            <div className="card-grid">
+              {filtered.map(m=><BirthdayCard key={m.id} member={m} onEdit={setEditing} onDelete={deleteMember}/>)}
+            </div>
+          )}
+        </>)}
 
-      {/* ── Cards view ── */}
-      {view==="cards" && (<>
-        <div style={{display:"flex",gap:10,marginBottom:18,flexWrap:"wrap"}}>
-          <div style={{position:"relative",flex:1,minWidth:160}}>
-            <i className="ti ti-search" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",fontSize:14,color:D.text3,pointerEvents:"none"}} aria-hidden="true"/>
-            <input type="text" placeholder="Search name or role…" value={search} onChange={e=>setSearch(e.target.value)}
-              style={{width:"100%",boxSizing:"border-box",padding:"9px 10px 9px 34px",fontSize:13,border:`1px solid ${D.borderHi}`,borderRadius:8,background:D.bg2,color:D.text1,outline:"none"}}/>
-          </div>
-          <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{padding:"9px 12px",fontSize:13,border:`1px solid ${D.borderHi}`,borderRadius:8,background:D.bg2,color:D.text1,cursor:"pointer",outline:"none"}}>
-            <option value="birthday">Next birthday</option>
-            <option value="age">Age (oldest first)</option>
-            <option value="ageDesc">Age (youngest first)</option>
-            <option value="name">Name (A–Z)</option>
-          </select>
-        </div>
-        {filtered.length===0 ? (
-          <div style={{textAlign:"center",padding:"56px 16px",color:D.text3}}>
-            <i className="ti ti-users" style={{fontSize:44,display:"block",marginBottom:14}} aria-hidden="true"/>
-            <div style={{fontSize:16,fontWeight:500,color:D.text2,marginBottom:6}}>{search?"No members found":"No family members yet"}</div>
-            <div style={{fontSize:13}}>{search?"Try a different search.":"Go to the Family tree tab and click any member to add relatives."}</div>
-          </div>
-        ) : (
-          <div className="card-grid">
-            {filtered.map(m=><BirthdayCard key={m.id} member={m} onEdit={setEditing} onDelete={deleteMember}/>)}
+        {/* ── Tree view ── */}
+        {view==="tree" && (
+          <div style={{overflowX:"auto",paddingBottom:8}}>
+            <div style={{padding:"8px 0 4px",fontSize:12,color:D.text3,marginBottom:16,textAlign:"center"}}>
+              Click any member to add a relative
+            </div>
+            <FamilyTreeView members={members} onNodeClick={m=>{ setTreeAnchor(m); setTreeLinkType(null); }}/>
           </div>
         )}
-      </>)}
+      </div>
 
-      {/* ── Tree view ── */}
-      {view==="tree" && (
-        <div style={{overflowX:"auto",paddingBottom:8}}>
-          <div style={{padding:"8px 0 4px",fontSize:12,color:D.text3,marginBottom:16,textAlign:"center"}}>
-            Click any member to add a relative
-          </div>
-          <FamilyTreeView members={members} onNodeClick={m=>{ setTreeAnchor(m); setTreeLinkType(null); }}/>
-        </div>
-      )}
-
-      {/* ── Edit modal (birthday cards) ── */}
+      {/* ── Modals ── */}
       {editing && (
         <Modal title={`Edit ${editing.name}`} onClose={()=>setEditing(null)}>
           <MemberForm initial={editing} onSave={saveMember} onCancel={()=>setEditing(null)}/>
         </Modal>
       )}
-
-      {/* ── Tree flow: step 1 — pick relationship ── */}
       {treeAnchor && !treeLinkType && (
-        <LinkPicker anchor={treeAnchor} onPick={type=>setTreeLinkType(type)} onClose={closeTreeFlow}/>
+        <LinkPicker anchor={treeAnchor} onPick={type=>setTreeLinkType(type)} onClose={closeTreeFlow}
+          onRemove={()=>{ if(confirm(`Remove ${treeAnchor.name} from the family?`)) { deleteMember(treeAnchor.id); closeTreeFlow(); } }}/>
       )}
-
-      {/* ── Tree flow: step 2 — fill in new member details ── */}
       {treeAnchor && treeLinkType && (
         <Modal title={addFormTitle} subtitle="Fill in the details for the new family member" onClose={closeTreeFlow}>
           <MemberForm onSave={addRelative} onCancel={closeTreeFlow}/>
