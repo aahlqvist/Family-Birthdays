@@ -367,6 +367,39 @@ function MemberForm({ initial, onSave, onCancel }) {
   );
 }
 
+// ── Couple key helper ────────────────────────────────────────────────────────
+function coupleKey(id1, id2) {
+  return `${Math.min(id1, id2)}-${Math.max(id1, id2)}`;
+}
+
+// ── Couple date modal ─────────────────────────────────────────────────────────
+function CoupleModal({ ckKey, coupleName, existing, onSave, onClose }) {
+  const [type, setType] = useState(existing?.type || "Wedding Date");
+  const [date, setDate] = useState(existing?.date || "");
+  const [err,  setErr]  = useState("");
+  function save(e) {
+    e.preventDefault();
+    if (!date) { setErr("Please select a date"); return; }
+    onSave(ckKey, { type, date });
+  }
+  const sel = {display:"block",width:"100%",boxSizing:"border-box",padding:"9px 12px",fontSize:14,border:`1px solid ${D.borderHi}`,borderRadius:8,background:D.bg2,color:D.text1,marginTop:5,outline:"none",cursor:"pointer"};
+  const lbl = {fontSize:12,color:D.text2,display:"block",marginTop:14,fontWeight:500,letterSpacing:"0.03em"};
+  return (
+    <Modal title={coupleName} subtitle="Set a relationship milestone" onClose={onClose}>
+      <form onSubmit={save}>
+        {err && <div style={{color:D.red,fontSize:12,marginBottom:8,padding:"8px 12px",background:"#f8717118",borderRadius:8}}>{err}</div>}
+        <label style={lbl}>Type<select value={type} onChange={e=>setType(e.target.value)} style={sel}><option>Wedding Date</option><option>First Date</option></select></label>
+        <label style={lbl}>Date *<input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{...sel,colorScheme:"dark"}}/></label>
+        <div style={{display:"flex",gap:8,marginTop:20}}>
+          <button type="submit" style={{flex:1,padding:"9px",background:D.accent,color:"#fff",border:"none",borderRadius:8,cursor:"pointer",fontSize:14,fontWeight:500}}>Save</button>
+          {existing && <button type="button" onClick={()=>onSave(ckKey,null)} style={{padding:"9px 14px",background:"transparent",border:`1px solid ${D.red}44`,borderRadius:8,cursor:"pointer",fontSize:14,color:D.red}}>Remove</button>}
+          <button type="button" onClick={onClose} style={{flex:1,padding:"9px",background:"transparent",border:`1px solid ${D.borderHi}`,borderRadius:8,cursor:"pointer",fontSize:14,color:D.text2}}>Cancel</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 // ── Modal ─────────────────────────────────────────────────────────────────────
 function Modal({ title, subtitle, children, onClose }) {
   return (
@@ -609,23 +642,31 @@ function buildTree(members) {
 }
 
 // ── Couple connector (heart) ──────────────────────────────────────────────────
-function SpouseConnector() {
+function SpouseConnector({ m1, m2, coupleDates, onCoupleClick }) {
+  const ck = m1 != null && m2 != null ? coupleKey(m1, m2) : null;
+  const di = ck && coupleDates ? coupleDates[ck] : null;
   return (
     <div style={{display:"flex",alignItems:"center",flexShrink:0}}>
-      <div style={{width:12,height:2,background:D.gold}}/>
-      <div style={{
-        width:36,height:36,borderRadius:"50%",
-        background:D.goldLo,border:`2px solid ${D.gold}`,
-        display:"flex",alignItems:"center",justifyContent:"center",
-        fontSize:16,color:"#f87171",flexShrink:0,
-      }}>♥</div>
-      <div style={{width:12,height:2,background:D.gold}}/>
+      <div style={{width:44,height:2,background:D.gold}}/>
+      <div style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        {di && (
+          <div style={{position:"absolute",bottom:"calc(100% + 6px)",left:"50%",transform:"translateX(-50%)",whiteSpace:"nowrap",textAlign:"center",pointerEvents:"none",zIndex:3}}>
+            <div style={{fontSize:9,color:D.text1,letterSpacing:"0.07em",textTransform:"uppercase"}}>{di.type}</div>
+            <div style={{fontSize:11,fontWeight:500,color:D.text1}}>{fmtDate(di.date)}</div>
+          </div>
+        )}
+        <div onClick={ck&&onCoupleClick?()=>onCoupleClick(ck,m1,m2):undefined}
+          style={{width:36,height:36,borderRadius:"50%",background:D.goldLo,border:`2px solid ${D.gold}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"#f87171",flexShrink:0,cursor:ck?"pointer":"default",transition:"transform 0.15s"}}
+          onMouseEnter={e=>{if(ck)e.currentTarget.style.transform="scale(1.15)";}}
+          onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>♥</div>
+      </div>
+      <div style={{width:44,height:2,background:D.gold}}/>
     </div>
   );
 }
 
 // ── Recursive tree unit (no children version for linked branches) ─────────────
-function TreeUnitNoKids({ unit, onNodeClick }) {
+function TreeUnitNoKids({ unit, onNodeClick, coupleDates, onCoupleClick }) {
   const { member, spouse, crossSpouseName } = unit;
   return (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
@@ -633,7 +674,7 @@ function TreeUnitNoKids({ unit, onNodeClick }) {
         <TreeNode member={member} highlight onClick={()=>onNodeClick(member)}
           spouseName={!spouse ? crossSpouseName : null}/>
         {spouse && <>
-          <SpouseConnector/>
+          <SpouseConnector m1={member.id} m2={spouse.id} coupleDates={coupleDates} onCoupleClick={onCoupleClick}/>
           <TreeNode member={spouse} highlight onClick={()=>onNodeClick(spouse)}/>
         </>}
       </div>
@@ -642,7 +683,7 @@ function TreeUnitNoKids({ unit, onNodeClick }) {
 }
 
 // ── Standard recursive tree unit ──────────────────────────────────────────────
-function TreeUnit({ unit, onNodeClick, hasChildren }) {
+function TreeUnit({ unit, onNodeClick, hasChildren, coupleDates, onCoupleClick }) {
   const { member, spouse, crossSpouseName, childNodes } = unit;
   const CARD_W = 110;
   const GAP = 20;
@@ -654,7 +695,7 @@ function TreeUnit({ unit, onNodeClick, hasChildren }) {
         <TreeNode member={member} highlight={isHighlighted} onClick={()=>onNodeClick(member)}
           spouseName={!spouse ? crossSpouseName : null}/>
         {spouse && <>
-          <SpouseConnector large={isHighlighted}/>
+          <SpouseConnector m1={member.id} m2={spouse.id} coupleDates={coupleDates} onCoupleClick={onCoupleClick}/>
           <TreeNode member={spouse} highlight={isHighlighted} onClick={()=>onNodeClick(spouse)}/>
         </>}
       </div>
@@ -662,7 +703,7 @@ function TreeUnit({ unit, onNodeClick, hasChildren }) {
         <>
           <div style={{width:2,height:28,background:D.gold}}/>
           {childNodes.length === 1
-            ? <TreeUnit unit={childNodes[0]} onNodeClick={onNodeClick} hasChildren={childNodes[0].childNodes.length>0}/>
+            ? <TreeUnit unit={childNodes[0]} onNodeClick={onNodeClick} hasChildren={childNodes[0].childNodes.length>0} coupleDates={coupleDates} onCoupleClick={onCoupleClick}/>
             : (
               <div style={{position:"relative",display:"flex",gap:GAP,alignItems:"flex-start"}}>
                 <div style={{position:"absolute",top:0,left:CARD_W/2,
@@ -684,7 +725,7 @@ function TreeUnit({ unit, onNodeClick, hasChildren }) {
 }
 
 // ── Children row (shared) ─────────────────────────────────────────────────────
-function ChildrenRow({ childNodes, onNodeClick }) {
+function ChildrenRow({ childNodes, onNodeClick, coupleDates, onCoupleClick }) {
   const CARD_W = 110;
   const GAP = 20;
   if (childNodes.length === 0) return null;
@@ -738,7 +779,7 @@ function BranchChain({ path, onNodeClick }) {
 // Handles cross-branch couples at ANY depth — renders the full chain from each
 // root down to (but not including) the cross-couple member, then connects the
 // couple with a marriage bar and shared children below.
-function LinkedBranchView({ leftRoot, rightRoot, leftChild, rightChild, sharedChildren, onNodeClick }) {
+function LinkedBranchView({ leftRoot, rightRoot, leftChild, rightChild, sharedChildren, onNodeClick, coupleDates, onCoupleClick }) {
 
   // Find path from root to target unit (inclusive), via DFS
   function findPath(root, targetId) {
@@ -767,7 +808,7 @@ function LinkedBranchView({ leftRoot, rightRoot, leftChild, rightChild, sharedCh
   // Row 1: ancestors; Row 2: drop lines; Row 3: cross-couple + heart.
   // Same section widths in all rows guarantees alignment with no negative-margin tricks.
   const CARD_W   = 110;
-  const SP_CONN  = 60;           // SpouseConnector visual width (12+36+12)
+  const SP_CONN  = 124;          // SpouseConnector visual width (44+36+44)
   const COUPLE_W = CARD_W + SP_CONN + CARD_W; // 280
   const HEART_W  = 80;           // width of the big heart connector section
 
@@ -786,7 +827,7 @@ function LinkedBranchView({ leftRoot, rightRoot, leftChild, rightChild, sharedCh
         {idx > 0 && <div style={{width:2,height:28,background:D.gold}}/>}
         <div style={{display:"flex",alignItems:"center"}}>
           <TreeNode member={unit.member} onClick={()=>onNodeClick(unit.member)}/>
-          {unit.spouse && <><SpouseConnector/>
+          {unit.spouse && <><SpouseConnector m1={unit.member.id} m2={unit.spouse.id} coupleDates={coupleDates} onCoupleClick={onCoupleClick}/>
             <TreeNode member={unit.spouse} onClick={()=>onNodeClick(unit.spouse)}/></>}
         </div>
       </div>
@@ -830,17 +871,31 @@ function LinkedBranchView({ leftRoot, rightRoot, leftChild, rightChild, sharedCh
           <TreeNode member={leftChild.member} highlight onClick={()=>onNodeClick(leftChild.member)}/>
           <div style={{flex:1,height:2,background:D.gold}}/>
         </div>
-        {/* Heart connector spans HEART_W */}
-        <div style={{width:HEART_W,display:"flex",alignItems:"center",flexShrink:0}}>
-          <div style={{flex:1,height:2,background:D.gold}}/>
-          <div style={{
-            width:48,height:48,borderRadius:"50%",
-            background:D.goldLo,border:`2.5px solid ${D.gold}`,
-            display:"flex",alignItems:"center",justifyContent:"center",
-            fontSize:22,color:"#f87171",flexShrink:0,
-          }}>♥</div>
-          <div style={{flex:1,height:2,background:D.gold}}/>
-        </div>
+        {/* Heart connector spans HEART_W — clickable to set couple date */}
+        {(()=>{
+          const ck = coupleKey(leftChild.member.id, rightChild.member.id);
+          const di = coupleDates?.[ck];
+          return (
+            <div style={{width:HEART_W,display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0}}>
+              <div style={{width:"100%",display:"flex",alignItems:"center"}}>
+                <div style={{flex:1,height:2,background:D.gold}}/>
+                <div style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {di && (
+                    <div style={{position:"absolute",bottom:"calc(100% + 8px)",left:"50%",transform:"translateX(-50%)",whiteSpace:"nowrap",textAlign:"center",pointerEvents:"none",zIndex:3}}>
+                      <div style={{fontSize:9,color:D.text1,letterSpacing:"0.07em",textTransform:"uppercase"}}>{di.type}</div>
+                      <div style={{fontSize:11,fontWeight:500,color:D.text1}}>{fmtDate(di.date)}</div>
+                    </div>
+                  )}
+                  <div onClick={()=>onCoupleClick(ck,leftChild.member.id,rightChild.member.id)}
+                    style={{width:48,height:48,borderRadius:"50%",background:D.goldLo,border:`2.5px solid ${D.gold}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,color:"#f87171",flexShrink:0,cursor:"pointer",transition:"transform 0.15s"}}
+                    onMouseEnter={e=>e.currentTarget.style.transform="scale(1.12)"}
+                    onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>♥</div>
+                </div>
+                <div style={{flex:1,height:2,background:D.gold}}/>
+              </div>
+            </div>
+          );
+        })()}
         {/* Right section: stub-line-from-edge | Andreas | spacer */}
         <div style={{width:rightW,display:"flex",alignItems:"center"}}>
           <div style={{flex:1,height:2,background:D.gold}}/>
@@ -851,21 +906,21 @@ function LinkedBranchView({ leftRoot, rightRoot, leftChild, rightChild, sharedCh
 
       {/* ── Shared children ── */}
       {sharedChildren.length > 0 && (
-        <SharedChildrenRow childNodes={sharedChildren} onNodeClick={onNodeClick} topOffset={36}/>
+        <SharedChildrenRow childNodes={sharedChildren} onNodeClick={onNodeClick} topOffset={36} coupleDates={coupleDates} onCoupleClick={onCoupleClick}/>
       )}
     </div>
   );
 }
 
 // Shared children — drop line + horizontal bar + children, all centered
-function SharedChildrenRow({ childNodes, onNodeClick, topOffset=0 }) {
+function SharedChildrenRow({ childNodes, onNodeClick, topOffset=0, coupleDates, onCoupleClick }) {
   const CARD_W = 110;
   const GAP = 20;
   return (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginTop:-topOffset}}>
       <div style={{width:2,height:28+topOffset,background:D.gold}}/>
       {childNodes.length === 1 ? (
-        <TreeUnit unit={childNodes[0]} onNodeClick={onNodeClick} hasChildren={childNodes[0].childNodes.length>0}/>
+        <TreeUnit unit={childNodes[0]} onNodeClick={onNodeClick} hasChildren={childNodes[0].childNodes.length>0} coupleDates={coupleDates} onCoupleClick={onCoupleClick}/>
       ) : (
         <div style={{display:"flex",justifyContent:"center"}}>
           <div style={{position:"relative",display:"inline-flex",gap:GAP,alignItems:"flex-start"}}>
@@ -877,7 +932,7 @@ function SharedChildrenRow({ childNodes, onNodeClick, topOffset=0 }) {
             {childNodes.map(child => (
               <div key={child.member.id} style={{display:"flex",flexDirection:"column",alignItems:"center",width:CARD_W}}>
                 <div style={{width:2,height:20,background:D.gold}}/>
-                <TreeUnit unit={child} onNodeClick={onNodeClick} hasChildren={child.childNodes.length>0}/>
+                <TreeUnit unit={child} onNodeClick={onNodeClick} hasChildren={child.childNodes.length>0} coupleDates={coupleDates} onCoupleClick={onCoupleClick}/>
               </div>
             ))}
           </div>
@@ -889,7 +944,7 @@ function SharedChildrenRow({ childNodes, onNodeClick, topOffset=0 }) {
 
 // Couple row + children in a single flex column — guarantees children center
 // aligns with the midpoint of the marriage bar.
-function CoupleWithChildren({ left, right, childNodes, onNodeClick }) {
+function CoupleWithChildren({ left, right, childNodes, onNodeClick, coupleDates, onCoupleClick }) {
   const CARD_W = 110;
   const GAP = 20;
 
@@ -898,7 +953,7 @@ function CoupleWithChildren({ left, right, childNodes, onNodeClick }) {
       {/* Couple row */}
       <div style={{display:"flex",alignItems:"center"}}>
         <TreeNode member={left} highlight onClick={()=>onNodeClick(left)}/>
-        <SpouseConnector/>
+        <SpouseConnector m1={left.id} m2={right.id} coupleDates={coupleDates} onCoupleClick={onCoupleClick}/>
         <TreeNode member={right} highlight onClick={()=>onNodeClick(right)}/>
       </div>
 
@@ -934,7 +989,7 @@ function CoupleWithChildren({ left, right, childNodes, onNodeClick }) {
 }
 
 // ── Family Tree View ──────────────────────────────────────────────────────────
-function FamilyTreeView({ members, onNodeClick }) {
+function FamilyTreeView({ members, onNodeClick, coupleDates, onCoupleClick }) {
   const roots = buildTree(members);
   const byId = Object.fromEntries(members.map(m => [m.id, m]));
 
@@ -1016,6 +1071,8 @@ function FamilyTreeView({ members, onNodeClick }) {
             rightChild={g.rightChild}
             sharedChildren={g.sharedChildren}
             onNodeClick={onNodeClick}
+            coupleDates={coupleDates}
+            onCoupleClick={onCoupleClick}
           />
         ))}
         {unlinkedRoots.map(unit => (
@@ -1024,6 +1081,8 @@ function FamilyTreeView({ members, onNodeClick }) {
             unit={unit}
             onNodeClick={onNodeClick}
             hasChildren={unit.childNodes.length>0}
+            coupleDates={coupleDates}
+            onCoupleClick={onCoupleClick}
           />
         ))}
       </div>
@@ -1046,6 +1105,8 @@ function App() {
     return DEFAULT_MEMBERS;
   });
   const [nextId,       setNextId]       = useState(()=>Math.max(...DEFAULT_MEMBERS.map(m=>m.id))+1);
+  const [coupleDates,  setCoupleDates]  = useState(()=>{try{const s=localStorage.getItem("family-birthdays-couples");if(s)return JSON.parse(s);}catch{}return{};});
+  const [coupleModal,  setCoupleModal]  = useState(null);
   const [view,         setView]         = useState("cards");
   const [search,       setSearch]       = useState("");
   const [sortBy,       setSortBy]       = useState("birthday");
@@ -1054,7 +1115,17 @@ function App() {
   const [treeLinkType, setTreeLinkType] = useState(null);
 
   useEffect(()=>{ try { localStorage.setItem(STORAGE_KEY,JSON.stringify(members)); } catch {} },[members]);
+  useEffect(()=>{ try { localStorage.setItem("family-birthdays-couples",JSON.stringify(coupleDates)); } catch {} },[coupleDates]);
 
+  function onCoupleClick(ck, m1, m2) {
+    const byId = Object.fromEntries(members.map(m=>[m.id,m]));
+    const a=byId[m1]; const b=byId[m2];
+    setCoupleModal({ ck, name: a&&b?`${a.name} & ${b.name}`:"Couple", m1, m2 });
+  }
+  function saveCoupleDate(ck, data) {
+    setCoupleDates(prev=>{if(!data){const n={...prev};delete n[ck];return n;}return{...prev,[ck]:data};});
+    setCoupleModal(null);
+  }
   function saveMember(data) { setMembers(ms=>ms.map(m=>m.id===editing.id?{...m,...data}:m)); setEditing(null); }
   function deleteMember(id) {
     setMembers(ms=>ms.filter(m=>m.id!==id).map(m=>({...m,
@@ -1176,7 +1247,7 @@ function App() {
             <div style={{padding:"8px 0 4px",fontSize:12,color:D.text3,marginBottom:16,textAlign:"center"}}>
               Click any member to add a relative
             </div>
-            <FamilyTreeView members={members} onNodeClick={m=>{ setTreeAnchor(m); setTreeLinkType(null); }}/>
+            <FamilyTreeView members={members} onNodeClick={m=>{ setTreeAnchor(m); setTreeLinkType(null); }} coupleDates={coupleDates} onCoupleClick={onCoupleClick}/>
           </div>
         )}
       </div>
@@ -1186,6 +1257,10 @@ function App() {
         <Modal title={`Edit ${editing.name}`} onClose={()=>setEditing(null)}>
           <MemberForm initial={editing} onSave={saveMember} onCancel={()=>setEditing(null)}/>
         </Modal>
+      )}
+      {coupleModal && (
+        <CoupleModal ckKey={coupleModal.ck} coupleName={coupleModal.name}
+          existing={coupleDates[coupleModal.ck]} onSave={saveCoupleDate} onClose={()=>setCoupleModal(null)}/>
       )}
       {treeAnchor && !treeLinkType && (
         <LinkPicker anchor={treeAnchor} onPick={type=>setTreeLinkType(type)} onClose={closeTreeFlow}
