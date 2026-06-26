@@ -1319,7 +1319,7 @@ function TreeNode({
         lineHeight: 1.4,
         maxWidth: 90
       }
-    }, "Unknown parent", member.childName ? /*#__PURE__*/React.createElement(React.Fragment, null, " of", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", {
+    }, "Unknown ", member.parentRole || "parent", member.childName ? /*#__PURE__*/React.createElement(React.Fragment, null, " of", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", {
       style: {
         fontWeight: 500
       }
@@ -1425,7 +1425,7 @@ function TreeNode({
       color: D.gold,
       fontSize: 10
     }
-  }, "\u2665"), /*#__PURE__*/React.createElement("span", {
+  }, "♥"), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 10,
       color: D.gold,
@@ -1638,7 +1638,7 @@ function SpouseConnector({
       if (ck) e.currentTarget.style.transform = "scale(1.15)";
     },
     onMouseLeave: e => e.currentTarget.style.transform = "scale(1)"
-  }, "\u2665")), /*#__PURE__*/React.createElement("div", {
+  }, "♥")), /*#__PURE__*/React.createElement("div", {
     style: {
       width: 44,
       height: 2,
@@ -2441,7 +2441,7 @@ function FamilyTreeView({
       e.currentTarget.style.background = D.bg3;
       e.currentTarget.style.borderColor = D.red + '55';
     }
-  }, "\u2013 Gen"))), Array.from({
+  }, "– Gen"))), Array.from({
     length: numGen
   }, (_, i) => {
     const isLast = i === numGen - 1;
@@ -2633,7 +2633,8 @@ function App() {
         spouseId: namedId,
         imageUrl: null,
         placeholder: true,
-        childName: anchor.name
+        childName: anchor.name,
+        parentRole: "mother"
       };
 
       // For all other members at the same depth with no parents: create blank parent couples
@@ -2653,7 +2654,8 @@ function App() {
             spouseId: p2Id,
             imageUrl: null,
             placeholder: true,
-            childName: other.name
+            childName: other.name,
+            parentRole: "father"
           },
           p2: {
             id: p2Id,
@@ -2665,7 +2667,8 @@ function App() {
             spouseId: p1Id,
             imageUrl: null,
             placeholder: true,
-            childName: other.name
+            childName: other.name,
+            parentRole: "mother"
           }
         };
       });
@@ -2776,7 +2779,8 @@ function App() {
         spouseId: p2Id,
         imageUrl: null,
         placeholder: true,
-        childName: m.name
+        childName: m.name,
+        parentRole: "father"
       }, {
         id: p2Id,
         name: "?",
@@ -2787,7 +2791,8 @@ function App() {
         spouseId: p1Id,
         imageUrl: null,
         placeholder: true,
-        childName: m.name
+        childName: m.name,
+        parentRole: "mother"
       });
       updates[m.id] = {
         parentId: p1Id,
@@ -2938,7 +2943,7 @@ function App() {
     "aria-hidden": "true"
   }), /*#__PURE__*/React.createElement("input", {
     type: "text",
-    placeholder: "Search name or role\u2026",
+    placeholder: "Search name or role…",
     value: search,
     onChange: e => setSearch(e.target.value),
     style: {
@@ -2974,7 +2979,7 @@ function App() {
     value: "ageDesc"
   }, "Age (youngest first)"), /*#__PURE__*/React.createElement("option", {
     value: "name"
-  }, "Name (A\u2013Z)"))), filtered.length === 0 ? /*#__PURE__*/React.createElement("div", {
+  }, "Name (A–Z)"))), filtered.length === 0 ? /*#__PURE__*/React.createElement("div", {
     style: {
       textAlign: "center",
       padding: "56px 16px",
@@ -3033,7 +3038,7 @@ function App() {
       transition: "all 0.15s",
       flexShrink: 0
     }
-  }, "\u2212"), /*#__PURE__*/React.createElement("span", {
+  }, "−"), /*#__PURE__*/React.createElement("span", {
     onClick: () => setTreeZoom(1),
     title: "Reset zoom",
     style: {
