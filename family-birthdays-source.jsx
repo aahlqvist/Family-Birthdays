@@ -7,7 +7,7 @@ const STORAGE_VERSION = "v17";
 // ── Cloud sync (Cloudflare Worker) ────────────────────────────────────────────
 // Set WORKER_URL to your deployed Worker URL to enable family sharing.
 // Leave empty ('') to run in local-only mode (no setup screen, no sync).
-const WORKER_URL = '';
+const WORKER_URL = 'https://family-birthdays.andreas-ahlqvist.workers.dev';
 const CODE_KEY   = 'family-birthdays-code';
 
 function generateCode() {
