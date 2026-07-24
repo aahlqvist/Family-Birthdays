@@ -9,15 +9,15 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { background: #060f26; font-family: system-ui, -apple-system, sans-serif; min-height: 100vh; }
     #root { width: 100%; }
-    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden;
+                clip: rect(0,0,0,0); white-space: nowrap; }
   </style>
 </head>
 <body>
   <div id="root"></div>
 
-  <!-- React inlined — no CDN dependency -->
-  <script>
-/**
+  <!-- React 18 — inlined so the app works without any CDN -->
+  <script>/**
  * @license React
  * react.production.min.js
  *
@@ -48,10 +48,8 @@ render:a}};c.isValidElement=M;c.lazy=function(a){return{$$typeof:Aa,_payload:{_s
 c.useEffect=function(a,b){return g.current.useEffect(a,b)};c.useId=function(){return g.current.useId()};c.useImperativeHandle=function(a,b,c){return g.current.useImperativeHandle(a,b,c)};c.useInsertionEffect=function(a,b){return g.current.useInsertionEffect(a,b)};c.useLayoutEffect=function(a,b){return g.current.useLayoutEffect(a,b)};c.useMemo=function(a,b){return g.current.useMemo(a,b)};c.useReducer=function(a,b,c){return g.current.useReducer(a,b,c)};c.useRef=function(a){return g.current.useRef(a)};
 c.useState=function(a){return g.current.useState(a)};c.useSyncExternalStore=function(a,b,c){return g.current.useSyncExternalStore(a,b,c)};c.useTransition=function(){return g.current.useTransition()};c.version="18.3.1"});
 })();
-
-  </script>
-  <script>
-/**
+</script>
+  <script>/**
  * @license React
  * react-dom.production.min.js
  *
@@ -318,14 +316,30 @@ c,!1,d,e);a[Ja]=b.current;sc(8===a.nodeType?a.parentNode:a);return new Xf(b)};Q.
 var d=null!=c&&c.hydratedSources||null,e=!1,f="",g=aj;null!==c&&void 0!==c&&(!0===c.unstable_strictMode&&(e=!0),void 0!==c.identifierPrefix&&(f=c.identifierPrefix),void 0!==c.onRecoverableError&&(g=c.onRecoverableError));b=Wi(b,null,a,1,null!=c?c:null,e,!1,f,g);a[Ja]=b.current;sc(a);if(d)for(a=0;a<d.length;a++)c=d[a],e=c._getVersion,e=e(c._source),null==b.mutableSourceEagerHydrationData?b.mutableSourceEagerHydrationData=[c,e]:b.mutableSourceEagerHydrationData.push(c,e);return new Ud(b)};Q.render=
 function(a,b,c){if(!Vd(b))throw Error(m(200));return Wd(null,a,b,!1,c)};Q.unmountComponentAtNode=function(a){if(!Vd(a))throw Error(m(40));return a._reactRootContainer?(yb(function(){Wd(null,null,a,!1,function(){a._reactRootContainer=null;a[Ja]=null})}),!0):!1};Q.unstable_batchedUpdates=Tf;Q.unstable_renderSubtreeIntoContainer=function(a,b,c,d){if(!Vd(c))throw Error(m(200));if(null==a||void 0===a._reactInternals)throw Error(m(38));return Wd(a,b,c,!1,d)};Q.version="18.3.1-next-f1338f8080-20240426"});
 })();
-
-  </script>
+</script>
 
   <!-- App -->
   <script>
     const { useState, useEffect } = React;
 const STORAGE_KEY = "family-birthdays-members";
+const useRef = React.useRef; // shim for module-level access
 const STORAGE_VERSION = "v17";
+
+// ── Cloud sync (Cloudflare Worker) ────────────────────────────────────────────
+// Set WORKER_URL to your deployed Worker URL to enable family sharing.
+// Leave empty ('') to run in local-only mode (no setup screen, no sync).
+const WORKER_URL = '';
+const CODE_KEY = 'family-birthdays-code';
+function generateCode() {
+  // Human-readable, unguessable: e.g. "ABCD-EFGH-JKLM"
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/0/1
+  let c = '';
+  for (let i = 0; i < 12; i++) {
+    if (i === 4 || i === 8) c += '-';
+    c += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return c;
+}
 const VERSION_KEY = "family-birthdays-version";
 const DEFAULT_MEMBERS = [{
   id: 1,
@@ -2830,6 +2844,154 @@ function FamilyTreeView({
 }
 
 // ── Main App ──────────────────────────────────────────────────────────────────
+// ── FamilySetup modal ────────────────────────────────────────────────────────
+function FamilySetup({
+  currentCode,
+  onCode,
+  onClose
+}) {
+  const [tab, setTab] = useState(currentCode ? 'current' : 'create');
+  const [input, setInput] = useState('');
+  const [newCode] = useState(generateCode);
+  const [copied, setCopied] = useState(false);
+  const codeDisplay = currentCode || newCode;
+  const tabBtn = (t, lbl) => /*#__PURE__*/React.createElement("button", {
+    key: t,
+    onClick: () => setTab(t),
+    style: {
+      flex: 1,
+      padding: "7px",
+      fontSize: 12,
+      fontWeight: 600,
+      borderRadius: 6,
+      cursor: "pointer",
+      border: "none",
+      transition: "all 0.15s",
+      background: tab === t ? D.blue : "transparent",
+      color: tab === t ? D.text1 : D.text3
+    }
+  }, lbl);
+  const codeBox = code => /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "center",
+      fontSize: 22,
+      fontWeight: 700,
+      letterSpacing: "0.12em",
+      color: D.gold,
+      padding: "16px",
+      background: D.bg3,
+      borderRadius: 8,
+      border: `1px solid ${D.border}`,
+      marginTop: 12,
+      fontFamily: "monospace",
+      userSelect: "all"
+    }
+  }, code);
+  const primaryBtn = (label, onClick, disabled) => /*#__PURE__*/React.createElement("button", {
+    onClick: onClick,
+    disabled: disabled,
+    style: {
+      width: "100%",
+      padding: "11px",
+      marginTop: 16,
+      fontSize: 13,
+      fontWeight: 600,
+      borderRadius: 8,
+      cursor: disabled ? "default" : "pointer",
+      border: `1px solid ${D.gold}`,
+      background: disabled ? D.bg3 : D.goldLo,
+      color: disabled ? D.text3 : D.gold,
+      transition: "all 0.15s"
+    }
+  }, label);
+  const note = txt => /*#__PURE__*/React.createElement("p", {
+    style: {
+      color: D.text3,
+      fontSize: 11,
+      marginTop: 8,
+      textAlign: "center",
+      lineHeight: 1.5
+    }
+  }, txt);
+  return /*#__PURE__*/React.createElement(Modal, {
+    title: "Family Space",
+    onClose: onClose
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 4,
+      marginBottom: 20,
+      background: D.bg3,
+      borderRadius: 8,
+      padding: 4
+    }
+  }, currentCode ? [tabBtn('current', 'Your code'), tabBtn('switch', 'Switch family')] : [tabBtn('create', 'New family'), tabBtn('join', 'Join family')]), tab === 'create' && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
+    style: {
+      color: D.text2,
+      fontSize: 13,
+      lineHeight: 1.6
+    }
+  }, "A unique code has been generated for your family. Share it with family members so everyone can access the same data."), codeBox(newCode), note('Save this code — everyone who joins needs it.'), primaryBtn('Create family with this code', () => onCode(newCode))), tab === 'join' && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
+    style: {
+      color: D.text2,
+      fontSize: 13,
+      lineHeight: 1.6
+    }
+  }, "Enter the code shared with you to access your family's data."), /*#__PURE__*/React.createElement("input", {
+    value: input,
+    onChange: e => setInput(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '')),
+    placeholder: "XXXX-XXXX-XXXX",
+    autoFocus: true,
+    style: {
+      width: "100%",
+      textAlign: "center",
+      fontSize: 20,
+      letterSpacing: "0.14em",
+      padding: "12px",
+      marginTop: 12,
+      borderRadius: 8,
+      fontFamily: "monospace",
+      background: D.bg3,
+      border: `1px solid ${D.border}`,
+      color: D.text1
+    }
+  }), primaryBtn('Join family', () => onCode(input), input.length < 3)), tab === 'current' && currentCode && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
+    style: {
+      color: D.text2,
+      fontSize: 13,
+      lineHeight: 1.6
+    }
+  }, "Share this code with family members so they can join your family space."), codeBox(currentCode), primaryBtn(copied ? '✓ Copied!' : 'Copy code', () => {
+    var _navigator$clipboard;
+    (_navigator$clipboard = navigator.clipboard) === null || _navigator$clipboard === void 0 || _navigator$clipboard.writeText(currentCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  })), tab === 'switch' && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
+    style: {
+      color: D.text2,
+      fontSize: 13,
+      lineHeight: 1.6
+    }
+  }, "Switch to a different family space. Your current data stays in the cloud and can be rejoined with its code."), /*#__PURE__*/React.createElement("input", {
+    value: input,
+    onChange: e => setInput(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '')),
+    placeholder: "Enter a family code",
+    autoFocus: true,
+    style: {
+      width: "100%",
+      textAlign: "center",
+      fontSize: 20,
+      letterSpacing: "0.14em",
+      padding: "12px",
+      marginTop: 12,
+      borderRadius: 8,
+      fontFamily: "monospace",
+      background: D.bg3,
+      border: `1px solid ${D.border}`,
+      color: D.text1
+    }
+  }), primaryBtn('Switch to this family', () => onCode(input), input.length < 3)));
+}
 function App() {
   const [members, setMembers] = useState(() => {
     try {
@@ -2858,6 +3020,22 @@ function App() {
   const [editing, setEditing] = useState(null);
   const [treeAnchor, setTreeAnchor] = useState(null);
   const [treeZoom, setTreeZoom] = useState(1);
+
+  // ── Cloud sync state ────────────────────────────────────────────────────────
+  const [familyCode, setFamilyCodeRaw] = useState(() => WORKER_URL ? localStorage.getItem(CODE_KEY) || '' : '');
+  const [showSetup, setShowSetup] = useState(() => !!WORKER_URL && !localStorage.getItem(CODE_KEY));
+  const [syncStatus, setSyncStatus] = useState('idle');
+  // 'idle' | 'pending' | 'syncing' | 'synced' | 'error' | 'offline'
+
+  const syncTimerRef = useRef(null);
+  const skipSyncUntil = useRef(0); // timestamp — skip push if Date.now() < this
+  const latestDataRef = useRef(null); // always-current snapshot for polling
+
+  function applyCode(code) {
+    localStorage.setItem(CODE_KEY, code);
+    setFamilyCodeRaw(code);
+    setShowSetup(false);
+  }
   const [treeLinkType, setTreeLinkType] = useState(null);
   useEffect(() => {
     try {
@@ -3076,6 +3254,87 @@ function App() {
     setTreeLinkType(null);
   }
 
+  // ── Keep latestDataRef in sync for polling ────────────────────────────────
+  useEffect(() => {
+    latestDataRef.current = {
+      members,
+      coupleDates,
+      nextId
+    };
+  }, [members, coupleDates, nextId]);
+
+  // ── Load from Worker when familyCode first becomes known ───────────────────
+  useEffect(() => {
+    if (!WORKER_URL || !familyCode) return;
+    setSyncStatus('syncing');
+    fetch(`${WORKER_URL}/family/${familyCode}`).then(r => r.status === 404 ? null : r.ok ? r.json() : Promise.reject(r.status)).then(data => {
+      if (data !== null && data !== void 0 && data.members) {
+        skipSyncUntil.current = Date.now() + 1500;
+        setMembers(data.members);
+        setCoupleDates(data.coupleDates || {});
+        setNextId(data.nextId || nextId);
+      }
+      setSyncStatus('synced');
+    }).catch(() => setSyncStatus('error'));
+  }, [familyCode]); // eslint-disable-line
+
+  // ── Push to Worker 2 s after any data change (debounced) ───────────────────
+  useEffect(() => {
+    if (!WORKER_URL || !familyCode) return;
+    if (Date.now() < skipSyncUntil.current) return;
+    const snap = {
+      members,
+      coupleDates,
+      nextId,
+      updatedAt: Date.now()
+    };
+    clearTimeout(syncTimerRef.current);
+    setSyncStatus('pending');
+    syncTimerRef.current = setTimeout(async () => {
+      setSyncStatus('syncing');
+      try {
+        const res = await fetch(`${WORKER_URL}/family/${familyCode}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(snap)
+        });
+        setSyncStatus(res.ok ? 'synced' : 'error');
+      } catch {
+        setSyncStatus('offline');
+      }
+    }, 2000);
+  }, [members, coupleDates, nextId]); // eslint-disable-line
+
+  // ── Poll for remote changes every 30 s ─────────────────────────────────────
+  useEffect(() => {
+    if (!WORKER_URL || !familyCode) return;
+    const poll = async () => {
+      if (document.hidden || Date.now() < skipSyncUntil.current) return;
+      try {
+        const res = await fetch(`${WORKER_URL}/family/${familyCode}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const cur = latestDataRef.current;
+        if (!cur) return;
+        if (JSON.stringify(data.members) !== JSON.stringify(cur.members) || JSON.stringify(data.coupleDates) !== JSON.stringify(cur.coupleDates)) {
+          skipSyncUntil.current = Date.now() + 1500;
+          setMembers(data.members);
+          setCoupleDates(data.coupleDates || {});
+          setNextId(data.nextId || cur.nextId);
+          setSyncStatus('synced');
+        }
+      } catch {}
+    };
+    const id = setInterval(poll, 30_000);
+    document.addEventListener('visibilitychange', poll);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', poll);
+    };
+  }, [familyCode]); // eslint-disable-line
+
   // Add a new blank generation above the current topmost (Gen 1) members
   function addGenerationAbove() {
     const byId = Object.fromEntries(members.map(m => [m.id, m]));
@@ -3235,7 +3494,47 @@ function App() {
       borderRadius: 10,
       border: `1px solid ${D.border}`
     }
-  }, TAB("cards", "ti-users", "Birthday cards"), TAB("tree", "ti-hierarchy", "Family tree"))), view === "cards" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, TAB("cards", "ti-users", "Birthday cards"), TAB("tree", "ti-hierarchy", "Family tree")), WORKER_URL && familyCode && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11,
+      letterSpacing: "0.04em",
+      color: syncStatus === 'synced' ? D.gold : syncStatus === 'error' || syncStatus === 'offline' ? D.red : D.text3,
+      transition: "color 0.3s"
+    }
+  }, syncStatus === 'synced' && '✓ synced', syncStatus === 'pending' && '· pending', syncStatus === 'syncing' && '↻ syncing…', syncStatus === 'error' && '⚠ sync error', syncStatus === 'offline' && '⚡ offline'), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowSetup(true),
+    title: `Family code: ${familyCode} — click to manage`,
+    style: {
+      fontSize: 10,
+      padding: "3px 8px",
+      borderRadius: 5,
+      cursor: "pointer",
+      background: D.bg3,
+      color: D.text3,
+      border: `1px solid ${D.border}`,
+      letterSpacing: "0.1em",
+      textTransform: "uppercase",
+      fontWeight: 700
+    }
+  }, familyCode.slice(0, 4), "…")), WORKER_URL && !familyCode && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowSetup(true),
+    style: {
+      fontSize: 11,
+      padding: "5px 12px",
+      borderRadius: 6,
+      cursor: "pointer",
+      background: D.goldLo,
+      color: D.gold,
+      border: `1px solid ${D.gold}55`,
+      fontWeight: 600
+    }
+  }, "Set up family")), view === "cards" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 10,
@@ -3415,7 +3714,11 @@ function App() {
     coupleDates: coupleDates,
     onCoupleClick: onCoupleClick,
     onAddGeneration: addGenerationAbove
-  }))))), editing && /*#__PURE__*/React.createElement(Modal, {
+  }))))), showSetup && WORKER_URL && /*#__PURE__*/React.createElement(FamilySetup, {
+    currentCode: familyCode || null,
+    onCode: applyCode,
+    onClose: familyCode ? () => setShowSetup(false) : null
+  }), editing && /*#__PURE__*/React.createElement(Modal, {
     title: `Edit ${editing.name}`,
     onClose: () => setEditing(null)
   }, /*#__PURE__*/React.createElement(MemberForm, {
@@ -3449,7 +3752,8 @@ function App() {
     onCancel: closeTreeFlow
   })));
 }
-    ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+    ReactDOM.createRoot(document.getElementById('root'))
+      .render(React.createElement(App));
   </script>
 </body>
 </html>

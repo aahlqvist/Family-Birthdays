@@ -1,0 +1,9 @@
+name              = "family-birthdays"
+main              = "worker.js"
+compatibility_date = "2024-11-01"
+
+# KV namespace that stores family data.
+# After running step 3 below, paste the returned `id` here.
+[[kv_namespaces]]
+binding = "FAMILY_DATA"
+id      = "PASTE_KV_NAMESPACE_ID_HERE"
