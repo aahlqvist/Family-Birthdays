@@ -1,0 +1,16 @@
+{
+  "name": "family-birthdays",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Build tooling for the Family Birthdays app",
+  "scripts": {
+    "build": "node build.js"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/plugin-transform-react-jsx": "^7.24.0",
+    "@babel/plugin-transform-optional-chaining": "^7.24.0",
+    "@babel/plugin-transform-nullish-coalescing-operator": "^7.24.0",
+    "@babel/plugin-transform-logical-assignment-operators": "^7.24.0"
+  }
+}
