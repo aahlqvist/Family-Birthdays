@@ -6,4 +6,4 @@ compatibility_date = "2024-11-01"
 # After running step 3 below, paste the returned `id` here.
 [[kv_namespaces]]
 binding = "FAMILY_DATA"
-id      = "PASTE_KV_NAMESPACE_ID_HERE"
+id      = "2dc47981532943998bf478e3f040e25d"
