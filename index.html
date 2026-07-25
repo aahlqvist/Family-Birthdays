@@ -790,6 +790,10 @@ function Avatar({
     fg,
     bg
   } = palFor(member);
+  const pos = member.imagePosition || {
+    x: 50,
+    y: 50
+  };
   return /*#__PURE__*/React.createElement("div", {
     style: {
       width: size,
@@ -809,7 +813,8 @@ function Avatar({
     style: {
       width: "100%",
       height: "100%",
-      objectFit: "cover"
+      objectFit: "cover",
+      objectPosition: `${pos.x}% ${pos.y}%`
     }
   }) : /*#__PURE__*/React.createElement("span", {
     style: {
@@ -1095,6 +1100,41 @@ function BirthdayCard({
   }), " ", label))));
 }
 
+// ── Image helpers ─────────────────────────────────────────────────────────────
+// Downscale a pasted image before storing it as a data URL — pasted screenshots
+// or photos can be several MB, and this is stored per-member in localStorage
+// and synced through Worker/KV, so keep it small.
+function resizeImageFile(file, maxDim = 640, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        let {
+          width,
+          height
+        } = img;
+        if (width > height && width > maxDim) {
+          height = Math.round(height * maxDim / width);
+          width = maxDim;
+        } else if (height >= width && height > maxDim) {
+          width = Math.round(width * maxDim / height);
+          height = maxDim;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 // ── Member Form ───────────────────────────────────────────────────────────────
 function MemberForm({
   initial,
@@ -1108,11 +1148,60 @@ function MemberForm({
     birthdate: (initial === null || initial === void 0 ? void 0 : initial.birthdate) || "",
     imageUrl: (initial === null || initial === void 0 ? void 0 : initial.imageUrl) || ""
   });
+  const [imagePosition, setImagePosition] = useState((initial === null || initial === void 0 ? void 0 : initial.imagePosition) || {
+    x: 50,
+    y: 50
+  });
   const [err, setErr] = useState("");
   const set = (k, v) => setForm(f => ({
     ...f,
     [k]: v
   }));
+  const setImage = url => {
+    set("imageUrl", url);
+    setImagePosition({
+      x: 50,
+      y: 50
+    });
+  };
+  function handleImagePaste(e) {
+    var _e$clipboardData;
+    const items = ((_e$clipboardData = e.clipboardData) === null || _e$clipboardData === void 0 ? void 0 : _e$clipboardData.items) || [];
+    for (const item of items) {
+      if (item.type && item.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        resizeImageFile(file).then(setImage).catch(() => {});
+        return;
+      }
+    }
+  }
+
+  // Drag-to-reposition: pointer events cover mouse, touch and pen in one API.
+  function onRepositionPointerDown(e) {
+    e.preventDefault();
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+    const rect = el.getBoundingClientRect();
+    const updateFromEvent = ev => {
+      const x = Math.min(100, Math.max(0, (ev.clientX - rect.left) / rect.width * 100));
+      const y = Math.min(100, Math.max(0, (ev.clientY - rect.top) / rect.height * 100));
+      setImagePosition({
+        x: Math.round(x),
+        y: Math.round(y)
+      });
+    };
+    updateFromEvent(e);
+    const move = ev => updateFromEvent(ev);
+    const up = ev => {
+      el.releasePointerCapture(ev.pointerId);
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+  }
   const submit = e => {
     e.preventDefault();
     if (!form.name.trim()) {
@@ -1127,7 +1216,10 @@ function MemberForm({
       setErr("Birthdate is required");
       return;
     }
-    onSave(form);
+    onSave({
+      ...form,
+      imagePosition
+    });
   };
   const field = {
     display: "block",
@@ -1189,10 +1281,56 @@ function MemberForm({
     style: lbl
   }, "Photo URL (optional)", /*#__PURE__*/React.createElement("input", {
     value: form.imageUrl,
-    onChange: e => set("imageUrl", e.target.value),
+    onChange: e => setImage(e.target.value),
+    onPaste: handleImagePaste,
     style: field,
-    placeholder: "https://..."
-  })), /*#__PURE__*/React.createElement("div", {
+    placeholder: "https://... or paste an image (Ctrl+V)"
+  })), form.imageUrl && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...lbl,
+      marginTop: 0,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between"
+    }
+  }, /*#__PURE__*/React.createElement("span", null, "Drag photo to reposition"), /*#__PURE__*/React.createElement("span", {
+    onClick: () => setImagePosition({
+      x: 50,
+      y: 50
+    }),
+    style: {
+      color: D.blue,
+      cursor: "pointer",
+      fontWeight: 500
+    }
+  }, "Center")), /*#__PURE__*/React.createElement("div", {
+    onPointerDown: onRepositionPointerDown,
+    style: {
+      width: 96,
+      height: 96,
+      borderRadius: "50%",
+      overflow: "hidden",
+      border: `2px solid ${D.borderHi}`,
+      marginTop: 8,
+      cursor: "grab",
+      touchAction: "none"
+    }
+  }, /*#__PURE__*/React.createElement("img", {
+    src: form.imageUrl,
+    alt: "",
+    draggable: false,
+    style: {
+      width: "100%",
+      height: "100%",
+      objectFit: "cover",
+      objectPosition: `${imagePosition.x}% ${imagePosition.y}%`,
+      pointerEvents: "none"
+    }
+  }))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,

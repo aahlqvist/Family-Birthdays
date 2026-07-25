@@ -195,6 +195,7 @@ function FrostBackground() {
 // ── Avatar ────────────────────────────────────────────────────────────────────
 function Avatar({ member, size=56 }) {
   const { fg, bg } = palFor(member);
+  const pos = member.imagePosition || { x:50, y:50 };
   return (
     <div style={{
       width:size, height:size, borderRadius:"50%",
@@ -204,7 +205,7 @@ function Avatar({ member, size=56 }) {
       overflow:"hidden", flexShrink:0,
     }}>
       {member.imageUrl
-        ? <img src={member.imageUrl} alt={member.name} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+        ? <img src={member.imageUrl} alt={member.name} style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:`${pos.x}% ${pos.y}%`}}/>
         : <span style={{fontSize:size*0.4, fontWeight:500, color:fg, lineHeight:1}}>{member.name.charAt(0).toUpperCase()}</span>
       }
     </div>
@@ -326,18 +327,82 @@ function BirthdayCard({ member, onEdit, onDelete }) {
   );
 }
 
+// ── Image helpers ─────────────────────────────────────────────────────────────
+// Downscale a pasted image before storing it as a data URL — pasted screenshots
+// or photos can be several MB, and this is stored per-member in localStorage
+// and synced through Worker/KV, so keep it small.
+function resizeImageFile(file, maxDim=640, quality=0.85) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > height && width > maxDim) { height = Math.round(height*maxDim/width); width = maxDim; }
+        else if (height >= width && height > maxDim) { width = Math.round(width*maxDim/height); height = maxDim; }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 // ── Member Form ───────────────────────────────────────────────────────────────
 function MemberForm({ initial, onSave, onCancel }) {
   const blank = initial?.placeholder; // don't prefill the "?"/"Unknown" placeholder text
   const [form, setForm] = useState({name:blank?"":initial?.name||"",role:blank?"":initial?.role||"",birthdate:initial?.birthdate||"",imageUrl:initial?.imageUrl||""});
+  const [imagePosition, setImagePosition] = useState(initial?.imagePosition || {x:50,y:50});
   const [err, setErr] = useState("");
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
+  const setImage = url => { set("imageUrl", url); setImagePosition({x:50,y:50}); };
+
+  function handleImagePaste(e) {
+    const items = e.clipboardData?.items || [];
+    for (const item of items) {
+      if (item.type && item.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        resizeImageFile(file).then(setImage).catch(()=>{});
+        return;
+      }
+    }
+  }
+
+  // Drag-to-reposition: pointer events cover mouse, touch and pen in one API.
+  function onRepositionPointerDown(e) {
+    e.preventDefault();
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+    const rect = el.getBoundingClientRect();
+    const updateFromEvent = ev => {
+      const x = Math.min(100, Math.max(0, ((ev.clientX-rect.left)/rect.width)*100));
+      const y = Math.min(100, Math.max(0, ((ev.clientY-rect.top)/rect.height)*100));
+      setImagePosition({ x:Math.round(x), y:Math.round(y) });
+    };
+    updateFromEvent(e);
+    const move = ev => updateFromEvent(ev);
+    const up = ev => {
+      el.releasePointerCapture(ev.pointerId);
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+  }
+
   const submit = e => {
     e.preventDefault();
     if (!form.name.trim()) { setErr("Name is required"); return; }
     if (!form.role.trim()) { setErr("Role is required"); return; }
     if (!form.birthdate)   { setErr("Birthdate is required"); return; }
-    onSave(form);
+    onSave({ ...form, imagePosition });
   };
   const field = {
     display:"block",width:"100%",boxSizing:"border-box",
@@ -352,7 +417,36 @@ function MemberForm({ initial, onSave, onCancel }) {
       <label style={lbl}>Name *<input value={form.name} onChange={e=>set("name",e.target.value)} style={field} placeholder="e.g. Grandpa Joe"/></label>
       <label style={lbl}>Role *<input value={form.role} onChange={e=>set("role",e.target.value)} style={field} placeholder="e.g. Grandfather"/></label>
       <label style={lbl}>Date of birth *<input type="date" value={form.birthdate} onChange={e=>set("birthdate",e.target.value)} style={{...field,colorScheme:"dark"}}/></label>
-      <label style={lbl}>Photo URL (optional)<input value={form.imageUrl} onChange={e=>set("imageUrl",e.target.value)} style={field} placeholder="https://..."/></label>
+      <label style={lbl}>Photo URL (optional)
+        <input
+          value={form.imageUrl}
+          onChange={e=>setImage(e.target.value)}
+          onPaste={handleImagePaste}
+          style={field}
+          placeholder="https://... or paste an image (Ctrl+V)"
+        />
+      </label>
+      {form.imageUrl && (
+        <div style={{marginTop:14}}>
+          <div style={{...lbl, marginTop:0, display:"flex", alignItems:"center", justifyContent:"space-between"}}>
+            <span>Drag photo to reposition</span>
+            <span onClick={()=>setImagePosition({x:50,y:50})} style={{color:D.blue,cursor:"pointer",fontWeight:500}}>Center</span>
+          </div>
+          <div
+            onPointerDown={onRepositionPointerDown}
+            style={{
+              width:96, height:96, borderRadius:"50%", overflow:"hidden",
+              border:`2px solid ${D.borderHi}`, marginTop:8,
+              cursor:"grab", touchAction:"none",
+            }}
+          >
+            <img
+              src={form.imageUrl} alt="" draggable={false}
+              style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:`${imagePosition.x}% ${imagePosition.y}%`,pointerEvents:"none"}}
+            />
+          </div>
+        </div>
+      )}
       <div style={{display:"flex",gap:8,marginTop:20}}>
         <button type="submit" style={{flex:1,padding:"9px",background:D.blue,color:"#fff",border:"none",borderRadius:8,cursor:"pointer",fontSize:14,fontWeight:500}}>
           {initial ? "Save changes" : "Add member"}
