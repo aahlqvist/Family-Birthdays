@@ -525,20 +525,23 @@ function Modal({ title, subtitle, children, onClose }) {
 }
 
 // ── Link Type Picker ──────────────────────────────────────────────────────────
-function LinkPicker({ anchor, onPick, onRemove, onClose, canAddParent, canAddChild }) {
+function LinkPicker({ anchor, onPick, onEdit, onRemove, onClose, canAddParent, canAddChild }) {
   // Enforce binary-tree structure: only show options valid for this member's position
   const allOptions = [
+    { type:"edit",   icon:"ti-edit",       label:"Edit details",
+      desc:`Update ${anchor.name}'s name, role, birthdate or photo`, show: true },
     { type:"parent", icon:"ti-arrow-up",   label:"Add a parent",
       desc:`Add a parent couple above ${anchor.name}'s row`, show: canAddParent },
     { type:"child",  icon:"ti-arrow-down", label:"Add a child",
       desc:`Add a child to ${anchor.name}'s family`, show: canAddChild },
   ];
   const options = allOptions.filter(o => o.show);
+  const handlePick = type => type === "edit" ? onEdit() : onPick(type);
   return (
-    <Modal title={anchor.name} subtitle={options.length ? "Add a relative or remove this member" : "Remove this member"} onClose={onClose}>
+    <Modal title={anchor.name} subtitle="Edit, add a relative, or remove this member" onClose={onClose}>
       <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:4}}>
         {options.map(({type,icon,label,desc})=>(
-          <button key={type} onClick={()=>onPick(type)}
+          <button key={type} onClick={()=>handlePick(type)}
             style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",background:D.bg2,border:`1px solid ${D.borderHi}`,borderRadius:12,cursor:"pointer",textAlign:"left",transition:"border-color 0.15s,background 0.15s"}}
             onMouseEnter={e=>{e.currentTarget.style.borderColor=`${D.gold}66`;e.currentTarget.style.background=D.bg3;}}
             onMouseLeave={e=>{e.currentTarget.style.borderColor=D.borderHi;e.currentTarget.style.background=D.bg2;}}
@@ -1894,6 +1897,7 @@ export default function App() {
           canAddParent={!treeAnchor.parentId && !treeAnchor.parent2Id}
           canAddChild={treeAnchor.crossMarriage === true}
           onPick={type=>setTreeLinkType(type)}
+          onEdit={()=>{ setEditing(treeAnchor); closeTreeFlow(); }}
           onClose={closeTreeFlow}
           onRemove={()=>{ if(confirm(`Remove ${treeAnchor.name} from the family?`)) { deleteMember(treeAnchor.id); closeTreeFlow(); } }}
         />

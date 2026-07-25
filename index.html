@@ -1576,6 +1576,7 @@ function Modal({
 function LinkPicker({
   anchor,
   onPick,
+  onEdit,
   onRemove,
   onClose,
   canAddParent,
@@ -1583,6 +1584,12 @@ function LinkPicker({
 }) {
   // Enforce binary-tree structure: only show options valid for this member's position
   const allOptions = [{
+    type: "edit",
+    icon: "ti-edit",
+    label: "Edit details",
+    desc: `Update ${anchor.name}'s name, role, birthdate or photo`,
+    show: true
+  }, {
     type: "parent",
     icon: "ti-arrow-up",
     label: "Add a parent",
@@ -1596,9 +1603,10 @@ function LinkPicker({
     show: canAddChild
   }];
   const options = allOptions.filter(o => o.show);
+  const handlePick = type => type === "edit" ? onEdit() : onPick(type);
   return /*#__PURE__*/React.createElement(Modal, {
     title: anchor.name,
-    subtitle: options.length ? "Add a relative or remove this member" : "Remove this member",
+    subtitle: "Edit, add a relative, or remove this member",
     onClose: onClose
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1614,7 +1622,7 @@ function LinkPicker({
     desc
   }) => /*#__PURE__*/React.createElement("button", {
     key: type,
-    onClick: () => onPick(type),
+    onClick: () => handlePick(type),
     style: {
       display: "flex",
       alignItems: "center",
@@ -3879,6 +3887,10 @@ function App() {
     canAddParent: !treeAnchor.parentId && !treeAnchor.parent2Id,
     canAddChild: treeAnchor.crossMarriage === true,
     onPick: type => setTreeLinkType(type),
+    onEdit: () => {
+      setEditing(treeAnchor);
+      closeTreeFlow();
+    },
     onClose: closeTreeFlow,
     onRemove: () => {
       if (confirm(`Remove ${treeAnchor.name} from the family?`)) {
