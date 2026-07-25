@@ -328,7 +328,8 @@ function BirthdayCard({ member, onEdit, onDelete }) {
 
 // ── Member Form ───────────────────────────────────────────────────────────────
 function MemberForm({ initial, onSave, onCancel }) {
-  const [form, setForm] = useState({name:initial?.name||"",role:initial?.role||"",birthdate:initial?.birthdate||"",imageUrl:initial?.imageUrl||""});
+  const blank = initial?.placeholder; // don't prefill the "?"/"Unknown" placeholder text
+  const [form, setForm] = useState({name:blank?"":initial?.name||"",role:blank?"":initial?.role||"",birthdate:initial?.birthdate||"",imageUrl:initial?.imageUrl||""});
   const [err, setErr] = useState("");
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const submit = e => {
@@ -1378,7 +1379,7 @@ export default function App() {
     setCoupleDates(prev=>{if(!data){const n={...prev};delete n[ck];return n;}return{...prev,[ck]:data};});
     setCoupleModal(null);
   }
-  function saveMember(data) { setMembers(ms=>ms.map(m=>m.id===editing.id?{...m,...data}:m)); setEditing(null); }
+  function saveMember(data) { setMembers(ms=>ms.map(m=>m.id===editing.id?{...m,...data,placeholder:false}:m)); setEditing(null); }
   function deleteMember(id) {
     setMembers(ms=>ms.filter(m=>m.id!==id).map(m=>({...m,
       parentId:m.parentId===id?null:m.parentId,

@@ -1101,9 +1101,10 @@ function MemberForm({
   onSave,
   onCancel
 }) {
+  const blank = initial === null || initial === void 0 ? void 0 : initial.placeholder; // don't prefill the "?"/"Unknown" placeholder text
   const [form, setForm] = useState({
-    name: (initial === null || initial === void 0 ? void 0 : initial.name) || "",
-    role: (initial === null || initial === void 0 ? void 0 : initial.role) || "",
+    name: blank ? "" : (initial === null || initial === void 0 ? void 0 : initial.name) || "",
+    role: blank ? "" : (initial === null || initial === void 0 ? void 0 : initial.role) || "",
     birthdate: (initial === null || initial === void 0 ? void 0 : initial.birthdate) || "",
     imageUrl: (initial === null || initial === void 0 ? void 0 : initial.imageUrl) || ""
   });
@@ -3080,7 +3081,8 @@ function App() {
   function saveMember(data) {
     setMembers(ms => ms.map(m => m.id === editing.id ? {
       ...m,
-      ...data
+      ...data,
+      placeholder: false
     } : m));
     setEditing(null);
   }
