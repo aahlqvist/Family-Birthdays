@@ -1362,7 +1362,7 @@ function FamilySetup({ currentCode, onCode, onClose }) {
         </p>
         {codeBox(newCode)}
         {note('Save this code — everyone who joins needs it.')}
-        {primaryBtn('Create family with this code', ()=>onCode(newCode))}
+        {primaryBtn('Create family with this code', ()=>onCode(newCode, true))}
       </>)}
 
       {/* Join */}
@@ -1415,6 +1415,20 @@ function FamilySetup({ currentCode, onCode, onClose }) {
           }}
         />
         {primaryBtn('Switch to this family', ()=>onCode(input), input.length < 3)}
+
+        <div style={{display:"flex",alignItems:"center",gap:8,margin:"18px 0 4px"}}>
+          <div style={{flex:1,height:1,background:D.borderHi}}/>
+          <span style={{fontSize:11,color:D.text3,textTransform:"uppercase",letterSpacing:"0.08em"}}>or</span>
+          <div style={{flex:1,height:1,background:D.borderHi}}/>
+        </div>
+        <button
+          onClick={()=>onCode(newCode, true)}
+          style={{
+            width:"100%", padding:"11px", fontSize:13, fontWeight:600,
+            borderRadius:8, cursor:"pointer",
+            border:`1px solid ${D.borderHi}`, background:"transparent", color:D.text2,
+          }}
+        >Create a new family instead</button>
       </>)}
     </Modal>
   );
@@ -1489,7 +1503,16 @@ export default function App() {
   const latestDataRef   = useRef(null); // always-current snapshot for polling
   const importInputRef  = useRef(null);
 
-  function applyCode(code) {
+  function applyCode(code, isNew) {
+    if (isNew) {
+      // Starting a brand-new family should start empty, not carry over
+      // whatever family was previously loaded in this browser.
+      const me = { id:1, name:"", role:"", birthdate:"", imageUrl:null, parentId:null, parent2Id:null, spouseId:null, placeholder:true };
+      setMembers([me]);
+      setCoupleDates({});
+      setNextId(2);
+      setEditing(me);
+    }
     localStorage.setItem(CODE_KEY, code);
     setFamilyCodeRaw(code);
     setShowSetup(false);
@@ -1851,14 +1874,16 @@ export default function App() {
               </span>
               <button
                 onClick={()=>setShowSetup(true)}
-                title={`Family code: ${familyCode} — click to manage`}
+                title={`Family code: ${familyCode}`}
                 style={{
-                  fontSize:10,padding:"3px 8px",borderRadius:5,cursor:"pointer",
-                  background:D.bg3,color:D.text3,
+                  display:"flex",alignItems:"center",gap:6,
+                  fontSize:11,fontWeight:600,padding:"5px 10px",borderRadius:6,cursor:"pointer",
+                  background:D.bg3,color:D.text2,
                   border:`1px solid ${D.border}`,
-                  letterSpacing:"0.1em",textTransform:"uppercase",fontWeight:700,
                 }}
-              >{familyCode.slice(0,4)}…</button>
+              >
+                <i className="ti ti-users" style={{fontSize:13}} aria-hidden="true"/> Manage family
+              </button>
             </div>
           )}
           {WORKER_URL && !familyCode && (
