@@ -1487,6 +1487,7 @@ export default function App() {
   const syncTimerRef    = useRef(null);
   const skipSyncUntil   = useRef(0);   // timestamp — skip push if Date.now() < this
   const latestDataRef   = useRef(null); // always-current snapshot for polling
+  const importInputRef  = useRef(null);
 
   function applyCode(code) {
     localStorage.setItem(CODE_KEY, code);
@@ -1514,6 +1515,37 @@ export default function App() {
       parent2Id:m.parent2Id===id?null:m.parent2Id,
       spouseId:m.spouseId===id?null:m.spouseId,
     })));
+  }
+
+  // ── Backup: export / restore all family data ───────────────────────────────
+  function exportBackup() {
+    const snapshot = { version:STORAGE_VERSION, exportedAt:new Date().toISOString(), members, coupleDates, nextId };
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type:"application/json" });
+    const url  = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `family-birthdays-backup-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  function triggerImport() { importInputRef.current?.click(); }
+  function handleImportFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file next time
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      let data;
+      try { data = JSON.parse(reader.result); } catch { alert("That file isn't valid JSON."); return; }
+      if (!Array.isArray(data?.members)) { alert("That file doesn't look like a family backup."); return; }
+      if (!confirm("Restore this backup? This will replace all current family members and dates.")) return;
+      const cleaned = sanitizeMembers(data.members);
+      setMembers(cleaned);
+      setCoupleDates(data.coupleDates || {});
+      setNextId(data.nextId || Math.max(0, ...cleaned.map(m=>m.id))+1);
+    };
+    reader.onerror = () => alert("Couldn't read that file.");
+    reader.readAsText(file);
   }
   // Returns depth of a member (0 = root) by walking up parentId chain
   function memberDepth(id, ms) {
@@ -1781,6 +1813,25 @@ export default function App() {
           <div style={{display:"flex",gap:6,padding:"4px",background:D.bgGlass,backdropFilter:"blur(8px)",borderRadius:10,border:`1px solid ${D.border}`}}>
             {TAB("cards","ti-users","Birthday cards")}
             {TAB("tree","ti-hierarchy","Family tree")}
+          </div>
+
+          {/* Backup: export / restore all family data */}
+          <div style={{display:"flex",gap:6}}>
+            <button onClick={exportBackup} title="Download a backup of all family data" style={{
+              display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,
+              padding:"6px 10px",borderRadius:6,cursor:"pointer",
+              background:D.bg3,color:D.text2,border:`1px solid ${D.border}`,
+            }}>
+              <i className="ti ti-download" style={{fontSize:13}} aria-hidden="true"/> Export
+            </button>
+            <button onClick={triggerImport} title="Restore family data from a backup file" style={{
+              display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,
+              padding:"6px 10px",borderRadius:6,cursor:"pointer",
+              background:D.bg3,color:D.text2,border:`1px solid ${D.border}`,
+            }}>
+              <i className="ti ti-upload" style={{fontSize:13}} aria-hidden="true"/> Import
+            </button>
+            <input ref={importInputRef} type="file" accept="application/json" onChange={handleImportFile} style={{display:"none"}}/>
           </div>
 
           {/* Sync indicator + family code chip (only when Worker is configured) */}
