@@ -1420,6 +1420,37 @@ function FamilySetup({ currentCode, onCode, onClose }) {
   );
 }
 
+// ── Repair duplicate-id corruption ───────────────────────────────────────────
+// A past bug let `nextId` fall out of sync with `members` (it was derived from
+// DEFAULT_MEMBERS instead of the loaded data), so adding a generation could
+// mint new placeholder ids that collided with existing real members' ids.
+// Duplicate ids are unambiguous evidence of that bug: the later occurrence in
+// the array is always the bogus freshly-minted placeholder, and any
+// parentId/parent2Id pointing at a duplicate id was set by that same failed
+// operation (a member only gets a parentId assigned when it previously had
+// none). So this is safe to auto-repair on every load.
+function sanitizeMembers(list) {
+  const counts = {};
+  list.forEach(m => { counts[m.id] = (counts[m.id]||0) + 1; });
+  const duplicateIds = new Set(Object.keys(counts).filter(id => counts[id] > 1).map(Number));
+  if (duplicateIds.size === 0) return list;
+
+  const seenIds = new Set();
+  const deduped = list.filter(m => {
+    if (!duplicateIds.has(m.id)) return true;
+    if (seenIds.has(m.id)) return false; // drop the later (bogus) duplicate
+    seenIds.add(m.id);
+    return true;
+  });
+
+  return deduped.map(m => ({
+    ...m,
+    parentId:  duplicateIds.has(m.parentId)  ? null : m.parentId,
+    parent2Id: duplicateIds.has(m.parent2Id) ? null : m.parent2Id,
+    spouseId:  duplicateIds.has(m.spouseId)  ? null : m.spouseId,
+  }));
+}
+
 export default function App() {
   const [members, setMembers] = useState(() => {
     try {
@@ -1429,11 +1460,11 @@ export default function App() {
         return DEFAULT_MEMBERS;
       }
       const s = localStorage.getItem(STORAGE_KEY);
-      if (s) return JSON.parse(s);
+      if (s) return sanitizeMembers(JSON.parse(s));
     } catch {}
     return DEFAULT_MEMBERS;
   });
-  const [nextId,       setNextId]       = useState(()=>Math.max(...DEFAULT_MEMBERS.map(m=>m.id))+1);
+  const [nextId,       setNextId]       = useState(()=>Math.max(0, ...members.map(m=>m.id))+1);
   const [coupleDates,  setCoupleDates]  = useState(()=>{try{const s=localStorage.getItem("family-birthdays-couples");if(s)return JSON.parse(s);}catch{}return{};});
   const [coupleModal,  setCoupleModal]  = useState(null);
   const [view,         setView]         = useState("cards");
@@ -1603,7 +1634,7 @@ export default function App() {
       .then(data => {
         if (data?.members) {
           skipSyncUntil.current = Date.now() + 1500;
-          setMembers(data.members);
+          setMembers(sanitizeMembers(data.members));
           setCoupleDates(data.coupleDates || {});
           setNextId(data.nextId || nextId);
         }
@@ -1648,7 +1679,7 @@ export default function App() {
         if (JSON.stringify(data.members)     !== JSON.stringify(cur.members) ||
             JSON.stringify(data.coupleDates) !== JSON.stringify(cur.coupleDates)) {
           skipSyncUntil.current = Date.now() + 1500;
-          setMembers(data.members);
+          setMembers(sanitizeMembers(data.members));
           setCoupleDates(data.coupleDates || {});
           setNextId(data.nextId || cur.nextId);
           setSyncStatus('synced');
