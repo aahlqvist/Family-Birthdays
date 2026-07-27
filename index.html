@@ -334,6 +334,52 @@ const STORAGE_VERSION = "v17";
 const WORKER_URL = 'https://family-birthdays.andreas-ahlqvist.workers.dev';
 const CODE_KEY = 'family-birthdays-code';
 const NAME_KEY = 'family-birthdays-name';
+const COUPLES_KEY = 'family-birthdays-couples';
+
+// ── Which family this browser tab follows ───────────────────────────────────
+// sessionStorage is per-tab, so switching family in one tab can't silently
+// hijack another tab on reload. A brand-new tab has no sessionStorage entry
+// yet, so it falls back to localStorage (the last family used anywhere in
+// this browser) to keep "remember my family" working across restarts.
+function resolveFamilyCode() {
+  try {
+    const fromSession = sessionStorage.getItem(CODE_KEY);
+    if (fromSession) return fromSession;
+    const fromLocal = localStorage.getItem(CODE_KEY) || '';
+    if (fromLocal) sessionStorage.setItem(CODE_KEY, fromLocal);
+    return fromLocal;
+  } catch {
+    return '';
+  }
+}
+function persistFamilyCode(code) {
+  try {
+    sessionStorage.setItem(CODE_KEY, code);
+    localStorage.setItem(CODE_KEY, code);
+  } catch {}
+}
+
+// ── Local cache, namespaced per family code ─────────────────────────────────
+// Without a code (local-only mode) these behave exactly as before. With a
+// code, each family gets its own cache bucket so two tabs on two different
+// families never overwrite each other's local copy. Falls back to the
+// pre-namespacing flat key once, so existing users don't lose their cache.
+function familyCacheGet(base, code) {
+  try {
+    if (code) {
+      const v = localStorage.getItem(`${base}:${code}`);
+      return v !== null ? v : localStorage.getItem(base);
+    }
+    return localStorage.getItem(base);
+  } catch {
+    return null;
+  }
+}
+function familyCacheSet(base, code, value) {
+  try {
+    localStorage.setItem(code ? `${base}:${code}` : base, value);
+  } catch {}
+}
 function generateCode() {
   // Human-readable, unguessable: e.g. "ABCD-EFGH-JKLM"
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/0/1
@@ -3244,12 +3290,14 @@ function sanitizeMembers(list) {
 function App() {
   const [members, setMembers] = useState(() => {
     try {
+      const code = WORKER_URL ? resolveFamilyCode() : '';
       if (localStorage.getItem(VERSION_KEY) !== STORAGE_VERSION) {
         localStorage.setItem(VERSION_KEY, STORAGE_VERSION);
         localStorage.removeItem(STORAGE_KEY);
+        if (code) localStorage.removeItem(`${STORAGE_KEY}:${code}`);
         return DEFAULT_MEMBERS;
       }
-      const s = localStorage.getItem(STORAGE_KEY);
+      const s = familyCacheGet(STORAGE_KEY, code);
       if (s) return sanitizeMembers(JSON.parse(s));
     } catch {}
     return DEFAULT_MEMBERS;
@@ -3257,7 +3305,7 @@ function App() {
   const [nextId, setNextId] = useState(() => Math.max(0, ...members.map(m => m.id)) + 1);
   const [coupleDates, setCoupleDates] = useState(() => {
     try {
-      const s = localStorage.getItem("family-birthdays-couples");
+      const s = familyCacheGet(COUPLES_KEY, WORKER_URL ? resolveFamilyCode() : '');
       if (s) return JSON.parse(s);
     } catch {}
     return {};
@@ -3271,9 +3319,9 @@ function App() {
   const [treeZoom, setTreeZoom] = useState(1);
 
   // ── Cloud sync state ────────────────────────────────────────────────────────
-  const [familyCode, setFamilyCodeRaw] = useState(() => WORKER_URL ? localStorage.getItem(CODE_KEY) || '' : '');
-  const [showSetup, setShowSetup] = useState(() => !!WORKER_URL && !localStorage.getItem(CODE_KEY));
-  const [familyName, setFamilyName] = useState(() => localStorage.getItem(NAME_KEY) || '');
+  const [familyCode, setFamilyCodeRaw] = useState(() => WORKER_URL ? resolveFamilyCode() : '');
+  const [showSetup, setShowSetup] = useState(() => !!WORKER_URL && !resolveFamilyCode());
+  const [familyName, setFamilyName] = useState(() => familyCacheGet(NAME_KEY, WORKER_URL ? resolveFamilyCode() : '') || '');
   const [syncStatus, setSyncStatus] = useState('idle');
   // 'idle' | 'pending' | 'syncing' | 'synced' | 'error' | 'offline'
 
@@ -3302,26 +3350,26 @@ function App() {
       setFamilyName('');
       setEditing(me);
     }
-    localStorage.setItem(CODE_KEY, code);
+    persistFamilyCode(code);
     setFamilyCodeRaw(code);
     setShowSetup(false);
   }
   const [treeLinkType, setTreeLinkType] = useState(null);
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(members));
+      familyCacheSet(STORAGE_KEY, familyCode, JSON.stringify(members));
     } catch {}
-  }, [members]);
+  }, [members, familyCode]);
   useEffect(() => {
     try {
-      localStorage.setItem("family-birthdays-couples", JSON.stringify(coupleDates));
+      familyCacheSet(COUPLES_KEY, familyCode, JSON.stringify(coupleDates));
     } catch {}
-  }, [coupleDates]);
+  }, [coupleDates, familyCode]);
   useEffect(() => {
     try {
-      localStorage.setItem(NAME_KEY, familyName);
+      familyCacheSet(NAME_KEY, familyCode, familyName);
     } catch {}
-  }, [familyName]);
+  }, [familyName, familyCode]);
   function onCoupleClick(ck, m1, m2) {
     const byId = Object.fromEntries(members.map(m => [m.id, m]));
     const a = byId[m1];
