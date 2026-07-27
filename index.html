@@ -333,6 +333,7 @@ const STORAGE_VERSION = "v17";
 // Leave empty ('') to run in local-only mode (no setup screen, no sync).
 const WORKER_URL = 'https://family-birthdays.andreas-ahlqvist.workers.dev';
 const CODE_KEY = 'family-birthdays-code';
+const NAME_KEY = 'family-birthdays-name';
 function generateCode() {
   // Human-readable, unguessable: e.g. "ABCD-EFGH-JKLM"
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/0/1
@@ -2998,7 +2999,9 @@ function FamilyTreeView({
 function FamilySetup({
   currentCode,
   onCode,
-  onClose
+  onClose,
+  familyName,
+  onFamilyName
 }) {
   const [tab, setTab] = useState(currentCode ? 'current' : 'create');
   const [input, setInput] = useState('');
@@ -3116,7 +3119,33 @@ function FamilySetup({
     (_navigator$clipboard = navigator.clipboard) === null || _navigator$clipboard === void 0 || _navigator$clipboard.writeText(currentCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  })), tab === 'switch' && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
+  }), /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: 12,
+      color: D.text2,
+      display: "block",
+      marginTop: 20,
+      fontWeight: 500,
+      letterSpacing: "0.03em"
+    }
+  }, "Family name (optional)", /*#__PURE__*/React.createElement("input", {
+    value: familyName,
+    onChange: e => onFamilyName(e.target.value),
+    placeholder: "e.g. The Ahlqvists",
+    style: {
+      display: "block",
+      width: "100%",
+      boxSizing: "border-box",
+      padding: "9px 12px",
+      fontSize: 14,
+      marginTop: 5,
+      outline: "none",
+      border: `1px solid ${D.borderHi}`,
+      borderRadius: 8,
+      background: D.bg2,
+      color: D.text1
+    }
+  })), note('Shown next to the app title in the header for everyone in this family.')), tab === 'switch' && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
     style: {
       color: D.text2,
       fontSize: 13,
@@ -3244,6 +3273,7 @@ function App() {
   // ── Cloud sync state ────────────────────────────────────────────────────────
   const [familyCode, setFamilyCodeRaw] = useState(() => WORKER_URL ? localStorage.getItem(CODE_KEY) || '' : '');
   const [showSetup, setShowSetup] = useState(() => !!WORKER_URL && !localStorage.getItem(CODE_KEY));
+  const [familyName, setFamilyName] = useState(() => localStorage.getItem(NAME_KEY) || '');
   const [syncStatus, setSyncStatus] = useState('idle');
   // 'idle' | 'pending' | 'syncing' | 'synced' | 'error' | 'offline'
 
@@ -3269,6 +3299,7 @@ function App() {
       setMembers([me]);
       setCoupleDates({});
       setNextId(2);
+      setFamilyName('');
       setEditing(me);
     }
     localStorage.setItem(CODE_KEY, code);
@@ -3286,6 +3317,11 @@ function App() {
       localStorage.setItem("family-birthdays-couples", JSON.stringify(coupleDates));
     } catch {}
   }, [coupleDates]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(NAME_KEY, familyName);
+    } catch {}
+  }, [familyName]);
   function onCoupleClick(ck, m1, m2) {
     const byId = Object.fromEntries(members.map(m => [m.id, m]));
     const a = byId[m1];
@@ -3551,9 +3587,10 @@ function App() {
     latestDataRef.current = {
       members,
       coupleDates,
-      nextId
+      nextId,
+      familyName
     };
-  }, [members, coupleDates, nextId]);
+  }, [members, coupleDates, nextId, familyName]);
 
   // ── Load from Worker when familyCode first becomes known ───────────────────
   useEffect(() => {
@@ -3565,6 +3602,7 @@ function App() {
         setMembers(sanitizeMembers(data.members));
         setCoupleDates(data.coupleDates || {});
         setNextId(data.nextId || nextId);
+        setFamilyName(data.familyName || '');
       }
       setSyncStatus('synced');
     }).catch(() => setSyncStatus('error'));
@@ -3578,6 +3616,7 @@ function App() {
       members,
       coupleDates,
       nextId,
+      familyName,
       updatedAt: Date.now()
     };
     clearTimeout(syncTimerRef.current);
@@ -3597,7 +3636,7 @@ function App() {
         setSyncStatus('offline');
       }
     }, 2000);
-  }, [members, coupleDates, nextId]); // eslint-disable-line
+  }, [members, coupleDates, nextId, familyName]); // eslint-disable-line
 
   // ── Poll for remote changes every 30 s ─────────────────────────────────────
   useEffect(() => {
@@ -3610,11 +3649,12 @@ function App() {
         const data = await res.json();
         const cur = latestDataRef.current;
         if (!cur) return;
-        if (JSON.stringify(data.members) !== JSON.stringify(cur.members) || JSON.stringify(data.coupleDates) !== JSON.stringify(cur.coupleDates)) {
+        if (JSON.stringify(data.members) !== JSON.stringify(cur.members) || JSON.stringify(data.coupleDates) !== JSON.stringify(cur.coupleDates) || (data.familyName || '') !== (cur.familyName || '')) {
           skipSyncUntil.current = Date.now() + 1500;
           setMembers(sanitizeMembers(data.members));
           setCoupleDates(data.coupleDates || {});
           setNextId(data.nextId || cur.nextId);
+          setFamilyName(data.familyName || '');
           setSyncStatus('synced');
         }
       } catch {}
@@ -3712,6 +3752,8 @@ function App() {
     child: `Add a child of ${treeAnchor.name}`,
     spouse: `Add a spouse of ${treeAnchor.name}`
   }[treeLinkType];
+  const [familyNameFirstWord, ...familyNameRestWords] = familyName.split(" ");
+  const familyNameRest = familyNameRestWords.join(" ");
   return /*#__PURE__*/React.createElement("div", {
     style: {
       minHeight: "100vh",
@@ -3878,7 +3920,42 @@ function App() {
       fontSize: 13
     },
     "aria-hidden": "true"
-  }), " Manage family")), WORKER_URL && !familyCode && /*#__PURE__*/React.createElement("button", {
+  }), " Manage family")), WORKER_URL && familyCode && familyName && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 24,
+      fontWeight: 500,
+      color: D.text1,
+      letterSpacing: "-0.02em",
+      lineHeight: 1
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: D.gold
+    }
+  }, familyNameFirstWord), familyNameRest && ` ${familyNameRest}`), /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 20,
+      height: 4,
+      background: D.gold,
+      borderRadius: 2,
+      marginRight: -6,
+      flexShrink: 0
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 4,
+      height: 28,
+      background: D.gold,
+      borderRadius: 2,
+      flexShrink: 0
+    }
+  })), WORKER_URL && !familyCode && /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowSetup(true),
     style: {
       fontSize: 11,
@@ -4073,7 +4150,9 @@ function App() {
   }))))), showSetup && WORKER_URL && /*#__PURE__*/React.createElement(FamilySetup, {
     currentCode: familyCode || null,
     onCode: applyCode,
-    onClose: familyCode ? () => setShowSetup(false) : null
+    onClose: familyCode ? () => setShowSetup(false) : null,
+    familyName: familyName,
+    onFamilyName: setFamilyName
   }), editing && /*#__PURE__*/React.createElement(Modal, {
     title: `Edit ${editing.name}`,
     onClose: () => setEditing(null)

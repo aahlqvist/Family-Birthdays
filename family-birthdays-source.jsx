@@ -9,6 +9,7 @@ const STORAGE_VERSION = "v17";
 // Leave empty ('') to run in local-only mode (no setup screen, no sync).
 const WORKER_URL = 'https://family-birthdays.andreas-ahlqvist.workers.dev';
 const CODE_KEY   = 'family-birthdays-code';
+const NAME_KEY   = 'family-birthdays-name';
 
 function generateCode() {
   // Human-readable, unguessable: e.g. "ABCD-EFGH-JKLM"
@@ -1306,7 +1307,7 @@ function FamilyTreeView({ members, onNodeClick, coupleDates, onCoupleClick, onAd
 
 // ── Main App ──────────────────────────────────────────────────────────────────
 // ── FamilySetup modal ────────────────────────────────────────────────────────
-function FamilySetup({ currentCode, onCode, onClose }) {
+function FamilySetup({ currentCode, onCode, onClose, familyName, onFamilyName }) {
   const [tab, setTab]       = useState(currentCode ? 'current' : 'create');
   const [input, setInput]   = useState('');
   const [newCode]           = useState(generateCode);
@@ -1395,6 +1396,22 @@ function FamilySetup({ currentCode, onCode, onClose }) {
           setCopied(true);
           setTimeout(()=>setCopied(false), 2000);
         })}
+
+        <label style={{fontSize:12,color:D.text2,display:"block",marginTop:20,fontWeight:500,letterSpacing:"0.03em"}}>
+          Family name (optional)
+          <input
+            value={familyName}
+            onChange={e=>onFamilyName(e.target.value)}
+            placeholder="e.g. The Ahlqvists"
+            style={{
+              display:"block",width:"100%",boxSizing:"border-box",
+              padding:"9px 12px",fontSize:14,marginTop:5,outline:"none",
+              border:`1px solid ${D.borderHi}`,borderRadius:8,
+              background:D.bg2,color:D.text1,
+            }}
+          />
+        </label>
+        {note('Shown next to the app title in the header for everyone in this family.')}
       </>)}
 
       {/* Switch family */}
@@ -1495,6 +1512,7 @@ export default function App() {
   const [showSetup,  setShowSetup]  = useState(() =>
     !!WORKER_URL && !localStorage.getItem(CODE_KEY)
   );
+  const [familyName, setFamilyName] = useState(() => localStorage.getItem(NAME_KEY) || '');
   const [syncStatus, setSyncStatus] = useState('idle');
   // 'idle' | 'pending' | 'syncing' | 'synced' | 'error' | 'offline'
 
@@ -1511,6 +1529,7 @@ export default function App() {
       setMembers([me]);
       setCoupleDates({});
       setNextId(2);
+      setFamilyName('');
       setEditing(me);
     }
     localStorage.setItem(CODE_KEY, code);
@@ -1521,6 +1540,7 @@ export default function App() {
 
   useEffect(()=>{ try { localStorage.setItem(STORAGE_KEY,JSON.stringify(members)); } catch {} },[members]);
   useEffect(()=>{ try { localStorage.setItem("family-birthdays-couples",JSON.stringify(coupleDates)); } catch {} },[coupleDates]);
+  useEffect(()=>{ try { localStorage.setItem(NAME_KEY, familyName); } catch {} },[familyName]);
 
   function onCoupleClick(ck, m1, m2) {
     const byId = Object.fromEntries(members.map(m=>[m.id,m]));
@@ -1677,8 +1697,8 @@ export default function App() {
   function closeTreeFlow() { setTreeAnchor(null); setTreeLinkType(null); }
 
   // ── Keep latestDataRef in sync for polling ────────────────────────────────
-  useEffect(() => { latestDataRef.current = { members, coupleDates, nextId }; },
-    [members, coupleDates, nextId]);
+  useEffect(() => { latestDataRef.current = { members, coupleDates, nextId, familyName }; },
+    [members, coupleDates, nextId, familyName]);
 
   // ── Load from Worker when familyCode first becomes known ───────────────────
   useEffect(() => {
@@ -1692,6 +1712,7 @@ export default function App() {
           setMembers(sanitizeMembers(data.members));
           setCoupleDates(data.coupleDates || {});
           setNextId(data.nextId || nextId);
+          setFamilyName(data.familyName || '');
         }
         setSyncStatus('synced');
       })
@@ -1702,7 +1723,7 @@ export default function App() {
   useEffect(() => {
     if (!WORKER_URL || !familyCode) return;
     if (Date.now() < skipSyncUntil.current) return;
-    const snap = { members, coupleDates, nextId, updatedAt: Date.now() };
+    const snap = { members, coupleDates, nextId, familyName, updatedAt: Date.now() };
     clearTimeout(syncTimerRef.current);
     setSyncStatus('pending');
     syncTimerRef.current = setTimeout(async () => {
@@ -1718,7 +1739,7 @@ export default function App() {
         setSyncStatus('offline');
       }
     }, 2000);
-  }, [members, coupleDates, nextId]); // eslint-disable-line
+  }, [members, coupleDates, nextId, familyName]); // eslint-disable-line
 
   // ── Poll for remote changes every 30 s ─────────────────────────────────────
   useEffect(() => {
@@ -1732,11 +1753,13 @@ export default function App() {
         const cur  = latestDataRef.current;
         if (!cur) return;
         if (JSON.stringify(data.members)     !== JSON.stringify(cur.members) ||
-            JSON.stringify(data.coupleDates) !== JSON.stringify(cur.coupleDates)) {
+            JSON.stringify(data.coupleDates) !== JSON.stringify(cur.coupleDates) ||
+            (data.familyName || '')          !== (cur.familyName || '')) {
           skipSyncUntil.current = Date.now() + 1500;
           setMembers(sanitizeMembers(data.members));
           setCoupleDates(data.coupleDates || {});
           setNextId(data.nextId || cur.nextId);
+          setFamilyName(data.familyName || '');
           setSyncStatus('synced');
         }
       } catch {}
@@ -1805,6 +1828,9 @@ export default function App() {
     child:   `Add a child of ${treeAnchor.name}`,
     spouse:  `Add a spouse of ${treeAnchor.name}`,
   }[treeLinkType];
+
+  const [familyNameFirstWord, ...familyNameRestWords] = familyName.split(" ");
+  const familyNameRest = familyNameRestWords.join(" ");
 
   return (
     <div style={{minHeight:"100vh",fontFamily:"var(--font-sans)",color:D.text1,position:"relative"}}>
@@ -1884,6 +1910,15 @@ export default function App() {
               >
                 <i className="ti ti-users" style={{fontSize:13}} aria-hidden="true"/> Manage family
               </button>
+            </div>
+          )}
+          {WORKER_URL && familyCode && familyName && (
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{fontSize:24,fontWeight:500,color:D.text1,letterSpacing:"-0.02em",lineHeight:1}}>
+                <span style={{color:D.gold}}>{familyNameFirstWord}</span>{familyNameRest && ` ${familyNameRest}`}
+              </div>
+              <div style={{width:20,height:4,background:D.gold,borderRadius:2,marginRight:-6,flexShrink:0}}/>
+              <div style={{width:4,height:28,background:D.gold,borderRadius:2,flexShrink:0}}/>
             </div>
           )}
           {WORKER_URL && !familyCode && (
@@ -1985,6 +2020,8 @@ export default function App() {
           currentCode={familyCode || null}
           onCode={applyCode}
           onClose={familyCode ? ()=>setShowSetup(false) : null}
+          familyName={familyName}
+          onFamilyName={setFamilyName}
         />
       )}
 
