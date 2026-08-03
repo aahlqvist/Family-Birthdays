@@ -458,7 +458,7 @@ function MemberForm({ initial, onSave, onCancel }) {
       <label style={lbl}>Name *<input value={form.name} onChange={e=>set("name",e.target.value)} style={field} placeholder="e.g. Grandpa Joe"/></label>
       <label style={lbl}>Role *<input value={form.role} onChange={e=>set("role",e.target.value)} style={field} placeholder="e.g. Grandfather"/></label>
       <label style={lbl}>Date of birth *<input type="date" value={form.birthdate} onChange={e=>set("birthdate",e.target.value)} style={{...field,colorScheme:"dark"}}/></label>
-      <label style={lbl}>Photo URL (optional)
+      <label style={lbl}>Paste photo or provide photo URL (optional)
         <input
           value={form.imageUrl}
           onChange={e=>setImage(e.target.value)}
