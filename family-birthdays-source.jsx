@@ -1442,7 +1442,7 @@ function FamilySetup({ currentCode, onCode, onClose, familyName, onFamilyName })
           <input
             value={familyName}
             onChange={e=>onFamilyName(e.target.value)}
-            placeholder="e.g. The Ahlqvists"
+            placeholder="e.g. The Daltons"
             style={{
               display:"block",width:"100%",boxSizing:"border-box",
               padding:"9px 12px",fontSize:14,marginTop:5,outline:"none",
