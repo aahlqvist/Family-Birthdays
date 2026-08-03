@@ -397,7 +397,7 @@ function resizeImageFile(file, maxDim=640, quality=0.85) {
 // ── Member Form ───────────────────────────────────────────────────────────────
 function MemberForm({ initial, onSave, onCancel }) {
   const blank = initial?.placeholder; // don't prefill the "?"/"Unknown" placeholder text
-  const [form, setForm] = useState({name:blank?"":initial?.name||"",role:blank?"":initial?.role||"",birthdate:initial?.birthdate||"",imageUrl:initial?.imageUrl||""});
+  const [form, setForm] = useState({name:blank?"":initial?.name||"",role:blank?"":initial?.role||"",birthdate:initial?.birthdate||"2001-01-01",imageUrl:initial?.imageUrl||""});
   const [imagePosition, setImagePosition] = useState(initial?.imagePosition || {x:50,y:50});
   const [err, setErr] = useState("");
   const set = (k,v) => setForm(f=>({...f,[k]:v}));

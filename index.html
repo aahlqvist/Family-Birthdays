@@ -1192,7 +1192,7 @@ function MemberForm({
   const [form, setForm] = useState({
     name: blank ? "" : (initial === null || initial === void 0 ? void 0 : initial.name) || "",
     role: blank ? "" : (initial === null || initial === void 0 ? void 0 : initial.role) || "",
-    birthdate: (initial === null || initial === void 0 ? void 0 : initial.birthdate) || "",
+    birthdate: (initial === null || initial === void 0 ? void 0 : initial.birthdate) || "2001-01-01",
     imageUrl: (initial === null || initial === void 0 ? void 0 : initial.imageUrl) || ""
   });
   const [imagePosition, setImagePosition] = useState((initial === null || initial === void 0 ? void 0 : initial.imagePosition) || {
