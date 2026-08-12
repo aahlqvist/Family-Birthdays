@@ -51,6 +51,26 @@ function familyCacheSet(base, code, value) {
   try { localStorage.setItem(code ? `${base}:${code}` : base, value); } catch {}
 }
 
+// Every family this browser has ever named gets a `NAME_KEY:<code>` entry
+// (see familyCacheSet above), so that's the record of "previously opened
+// families" — no server round-trip needed to list them.
+function listKnownFamilies(excludeCode) {
+  try {
+    const prefix = `${NAME_KEY}:`;
+    const out = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(prefix)) continue;
+      const code = key.slice(prefix.length);
+      const name = localStorage.getItem(key) || '';
+      if (!code || !name || code === excludeCode) continue;
+      out.push({ code, name });
+    }
+    out.sort((a,b) => a.name.localeCompare(b.name));
+    return out;
+  } catch { return []; }
+}
+
 function generateCode() {
   // Human-readable, unguessable: e.g. "ABCD-EFGH-JKLM"
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/0/1
@@ -1354,6 +1374,7 @@ function FamilySetup({ currentCode, onCode, onClose, familyName, onFamilyName })
   const [copied, setCopied] = useState(false);
 
   const codeDisplay = currentCode || newCode;
+  const knownFamilies = listKnownFamilies(currentCode);
 
   const tabBtn = (t, lbl) => (
     <button key={t} onClick={()=>setTab(t)} style={{
@@ -1472,6 +1493,28 @@ function FamilySetup({ currentCode, onCode, onClose, familyName, onFamilyName })
           }}
         />
         {primaryBtn('Switch to this family', ()=>onCode(input), input.length < 3)}
+
+        {knownFamilies.length > 0 && (<>
+          <div style={{display:"flex",alignItems:"center",gap:8,margin:"18px 0 4px"}}>
+            <div style={{flex:1,height:1,background:D.borderHi}}/>
+            <span style={{fontSize:11,color:D.text3,textTransform:"uppercase",letterSpacing:"0.08em"}}>previously opened</span>
+            <div style={{flex:1,height:1,background:D.borderHi}}/>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:8}}>
+            {knownFamilies.map(f => (
+              <button
+                key={f.code}
+                onClick={()=>onCode(f.code)}
+                title={f.code}
+                style={{
+                  width:"100%", textAlign:"left", padding:"9px 12px", fontSize:13, fontWeight:600,
+                  borderRadius:8, cursor:"pointer",
+                  border:`1px solid ${D.borderHi}`, background:D.bg3, color:D.text1,
+                }}
+              >{f.name}</button>
+            ))}
+          </div>
+        </>)}
 
         <div style={{display:"flex",alignItems:"center",gap:8,margin:"18px 0 4px"}}>
           <div style={{flex:1,height:1,background:D.borderHi}}/>
