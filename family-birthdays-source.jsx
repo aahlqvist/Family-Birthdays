@@ -1660,7 +1660,8 @@ export default function App() {
     const url  = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `family-birthdays-backup-${new Date().toISOString().slice(0,10)}.json`;
+    const namePart = familyName.trim() ? `-${familyName.trim().replace(/[^a-z0-9]+/gi,"-").replace(/^-+|-+$/g,"")}` : "";
+    a.download = `family-birthdays-backup${namePart}-${new Date().toISOString().slice(0,10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }
