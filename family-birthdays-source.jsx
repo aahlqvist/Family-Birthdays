@@ -154,18 +154,27 @@ function parseDate(s) {
   const d = new Date(s + "T00:00:00");
   return isNaN(d) ? null : d;
 }
+function isLeapYear(y) { return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0; }
+// Feb 29 birthdays: observe on Feb 28 in non-leap years. Without this, plain
+// `new Date(year, 1, 29)` silently rolls over to March 1 in non-leap years,
+// quietly shifting the "next birthday" and age for anyone born on a leap day.
+function bdayInYear(bd, year) {
+  const month = bd.getMonth(), date = bd.getDate();
+  const day = (month === 1 && date === 29 && !isLeapYear(year)) ? 28 : date;
+  return new Date(year, month, day);
+}
 function calcAge(b) {
   const bd = parseDate(b); if (!bd) return null;
   const now = new Date();
   let a = now.getFullYear() - bd.getFullYear();
-  if (now < new Date(now.getFullYear(), bd.getMonth(), bd.getDate())) a--;
+  if (now < bdayInYear(bd, now.getFullYear())) a--;
   return a;
 }
 function nextBday(b) {
   const bd = parseDate(b); if (!bd) return null;
   const now = new Date();
-  let n = new Date(now.getFullYear(), bd.getMonth(), bd.getDate());
-  if (n <= now) n = new Date(now.getFullYear()+1, bd.getMonth(), bd.getDate());
+  let n = bdayInYear(bd, now.getFullYear());
+  if (n <= now) n = bdayInYear(bd, now.getFullYear()+1);
   return n;
 }
 function daysUntil(d) { return Math.ceil((d - new Date()) / 86400000); }
@@ -586,13 +595,15 @@ function Modal({ title, subtitle, children, onClose }) {
 }
 
 // ── Link Type Picker ──────────────────────────────────────────────────────────
-function LinkPicker({ anchor, onPick, onEdit, onRemove, onClose, canAddParent, canAddChild }) {
+function LinkPicker({ anchor, onPick, onEdit, onRemove, onClose, canAddParent, canAddSpouse, canAddChild }) {
   // Enforce binary-tree structure: only show options valid for this member's position
   const allOptions = [
     { type:"edit",   icon:"ti-edit",       label:"Edit details",
       desc:`Update ${anchor.name}'s name, role, birthdate or photo`, show: true },
     { type:"parent", icon:"ti-arrow-up",   label:"Add a parent",
       desc:`Add a parent couple above ${anchor.name}'s row`, show: canAddParent },
+    { type:"spouse", icon:"ti-heart",      label:"Add a spouse",
+      desc:`Add a spouse for ${anchor.name}`, show: canAddSpouse },
     { type:"child",  icon:"ti-arrow-down", label:"Add a child",
       desc:`Add a child to ${anchor.name}'s family`, show: canAddChild },
   ];
@@ -831,6 +842,82 @@ function buildTree(members) {
   return units.filter(u => !childClaimed.has(u));
 }
 
+// ── Cross-marriage linking ───────────────────────────────────────────────────
+// Detects root branches joined by a cross-marriage couple and returns what's
+// needed to render them via LinkedBranchView, plus lbvAncestors: every member
+// id that ends up drawn inside that renderer. LinkedBranchView walks a single
+// ancestor chain per descendant and has no concept of "this ancestor pair has
+// other children too" — so any other child of one of these ancestor pairs
+// would be silently dropped from the tree. lbvAncestors lets callers avoid
+// offering "Add a child" (or "Add a spouse" to a spouse-less ancestor) there
+// until LinkedBranchView can support sibling fan-outs.
+function computeLinkedGroups(members) {
+  const byId = Object.fromEntries(members.map(m => [m.id, m]));
+  const roots = buildTree(members);
+
+  const unitMap = {};
+  function mapUnits(u) {
+    unitMap[u.member.id] = u;
+    if (u.spouse) unitMap[u.spouse.id] = u;
+    u.childNodes.forEach(mapUnits);
+  }
+  roots.forEach(mapUnits);
+
+  function findCrossUnits(root) {
+    const result = [];
+    function walk(u) { if (u.crossSpouseName) result.push(u); u.childNodes.forEach(walk); }
+    walk(root);
+    return result;
+  }
+
+  const linked = new Set();
+  const linkedGroups = [];
+  for (let i = 0; i < roots.length; i++) {
+    if (linked.has(i)) continue;
+    for (let j = i + 1; j < roots.length; j++) {
+      if (linked.has(j)) continue;
+
+      const crossA = findCrossUnits(roots[i]);
+      const crossB = findCrossUnits(roots[j]);
+
+      let match = null;
+      for (const a of crossA) {
+        const aSpouseId = a.member.spouseId;
+        if (!aSpouseId || !unitMap[aSpouseId]) continue;
+        for (const b of crossB) {
+          if (b.member.id === aSpouseId) {
+            const sharedChildren = a.childNodes.length > 0 ? a.childNodes : b.childNodes;
+            match = { leftChild: a, rightChild: b, sharedChildren };
+            break;
+          }
+        }
+        if (match) break;
+      }
+
+      if (match) {
+        linked.add(i);
+        linked.add(j);
+        linkedGroups.push({ leftRoot: roots[i], rightRoot: roots[j], ...match });
+      }
+    }
+  }
+
+  const lbvAncestors = new Set();
+  function collectAncestors(id) {
+    if (!id || lbvAncestors.has(id)) return;
+    const m = byId[id]; if (!m) return;
+    lbvAncestors.add(id);
+    collectAncestors(m.parentId);
+    collectAncestors(m.parent2Id);
+  }
+  linkedGroups.forEach(g => {
+    collectAncestors(g.leftChild.member.id);
+    collectAncestors(g.rightChild.member.id);
+  });
+
+  return { roots, linked, linkedGroups, lbvAncestors };
+}
+
 // ── SpouseConnector — fills whatever width container it's placed in ───────────
 function SpouseConnector({ m1, m2, coupleDates, onCoupleClick }) {
   const ck = m1 != null && m2 != null ? coupleKey(m1, m2) : null;
@@ -1058,8 +1145,6 @@ function LinkedBranchView({ leftRoot, rightRoot, leftChild, rightChild, sharedCh
 }
 
 function SharedChildrenRow({ childNodes, onNodeClick, topOffset=0, coupleDates, onCoupleClick }) {
-  const CARD_W = 110;
-  const GAP = 20;
   return (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginTop:-topOffset}}>
       <div style={{width:2,height:28+topOffset,background:D.gold}}/>
@@ -1067,21 +1152,40 @@ function SharedChildrenRow({ childNodes, onNodeClick, topOffset=0, coupleDates, 
         <TreeUnit unit={childNodes[0]} onNodeClick={onNodeClick} hasChildren={childNodes[0].childNodes.length>0} coupleDates={coupleDates} onCoupleClick={onCoupleClick}/>
       ) : (
         <div style={{display:"flex",justifyContent:"center"}}>
-          <div style={{position:"relative",display:"inline-flex",gap:GAP,alignItems:"flex-start"}}>
-            <div style={{
-              position:"absolute",top:0,left:CARD_W/2,
-              width:childNodes.length*CARD_W+(childNodes.length-1)*GAP-CARD_W,
-              height:2,background:D.gold,
-            }}/>
-            {childNodes.map(child => (
-              <div key={child.member.id} style={{display:"flex",flexDirection:"column",alignItems:"center",width:CARD_W}}>
-                <div style={{width:2,height:20,background:D.gold}}/>
-                <TreeUnit unit={child} onNodeClick={onNodeClick} hasChildren={child.childNodes.length>0} coupleDates={coupleDates} onCoupleClick={onCoupleClick}/>
-              </div>
-            ))}
-          </div>
+          <ChildrenFanOut childNodes={childNodes} onNodeClick={onNodeClick} coupleDates={coupleDates} onCoupleClick={onCoupleClick}/>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── ChildrenFanOut — a row of 2+ sibling units, each its own natural width ───
+// Each sibling may be a solo member or a full couple (member + connector +
+// spouse), so a fixed per-column width can't be assumed. Instead each column
+// sizes to its own content (flexShrink:0, no explicit width), and the
+// horizontal connecting bar is built from real elements rather than a single
+// pixel-computed div: a GAP-wide filler between columns, plus — on each
+// column itself — a trimmed top line (from its own center outward) so the
+// line only spans center-of-first-child to center-of-last-child no matter
+// how wide any individual sibling turns out to be.
+function ChildrenFanOut({ childNodes, onNodeClick, coupleDates, onCoupleClick }) {
+  const GAP = 20;
+  return (
+    <div style={{display:"inline-flex",alignItems:"flex-start"}}>
+      {childNodes.map((child, i) => (
+        <React.Fragment key={child.member.id}>
+          {i > 0 && <div style={{width:GAP,height:2,background:D.gold,flexShrink:0}}/>}
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0,position:"relative"}}>
+            <div style={{
+              position:"absolute",top:0,height:2,background:D.gold,
+              left:  i===0 ? "50%" : 0,
+              right: i===childNodes.length-1 ? "50%" : 0,
+            }}/>
+            <div style={{width:2,height:20,background:D.gold}}/>
+            <TreeUnit unit={child} onNodeClick={onNodeClick} hasChildren={child.childNodes.length>0} coupleDates={coupleDates} onCoupleClick={onCoupleClick}/>
+          </div>
+        </React.Fragment>
+      ))}
     </div>
   );
 }
@@ -1089,7 +1193,6 @@ function SharedChildrenRow({ childNodes, onNodeClick, topOffset=0, coupleDates, 
 // ── TreeUnit — one couple (or solo member) + their subtree ───────────────────
 function TreeUnit({ unit, onNodeClick, hasChildren, coupleDates, onCoupleClick }) {
   const { member, spouse, crossSpouseName, childNodes, depth } = unit;
-  const CARD_W = 110, GAP = 20;
   return (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
       <div style={{display:"flex",alignItems:"center"}}>
@@ -1112,19 +1215,7 @@ function TreeUnit({ unit, onNodeClick, hasChildren, coupleDates, onCoupleClick }
               coupleDates={coupleDates} onCoupleClick={onCoupleClick}/>
           ) : (
             <div style={{display:"flex",justifyContent:"center"}}>
-              <div style={{position:"relative",display:"inline-flex",gap:GAP,alignItems:"flex-start"}}>
-                <div style={{position:"absolute",top:0,left:CARD_W/2,
-                  width:childNodes.length*CARD_W+(childNodes.length-1)*GAP-CARD_W,
-                  height:2,background:D.gold}}/>
-                {childNodes.map(child=>(
-                  <div key={child.member.id} style={{display:"flex",flexDirection:"column",alignItems:"center",width:CARD_W}}>
-                    <div style={{width:2,height:20,background:D.gold}}/>
-                    <TreeUnit unit={child} onNodeClick={onNodeClick}
-                      hasChildren={child.childNodes.length>0}
-                      coupleDates={coupleDates} onCoupleClick={onCoupleClick}/>
-                  </div>
-                ))}
-              </div>
+              <ChildrenFanOut childNodes={childNodes} onNodeClick={onNodeClick} coupleDates={coupleDates} onCoupleClick={onCoupleClick}/>
             </div>
           )}
         </>
@@ -1181,87 +1272,7 @@ function CoupleWithChildren({ left, right, childNodes, onNodeClick, coupleDates,
 
 // ── Family Tree View ──────────────────────────────────────────────────────────
 function FamilyTreeView({ members, onNodeClick, coupleDates, onCoupleClick, onAddGeneration, onRemoveGeneration }) {
-  const roots = buildTree(members);
-  const byId = Object.fromEntries(members.map(m => [m.id, m]));
-
-  // Collect all units in a flat map by member id
-  const unitMap = {};
-  function mapUnits(u) {
-    unitMap[u.member.id] = u;
-    if (u.spouse) unitMap[u.spouse.id] = u;
-    u.childNodes.forEach(mapUnits);
-  }
-  roots.forEach(mapUnits);
-
-  // Detect linked root pairs: two roots whose child-level units form a cross-couple
-  // A cross-couple: unit A has crossSpouseName pointing to a member in unit B (different root)
-  const linked = new Set();    // root indices that have been linked
-  const linkedGroups = [];     // {leftRoot, rightRoot, leftChild, rightChild, sharedChildren}
-
-  for (let i = 0; i < roots.length; i++) {
-    if (linked.has(i)) continue;
-    for (let j = i + 1; j < roots.length; j++) {
-      if (linked.has(j)) continue;
-
-      // Find all leaf-level units with crossSpouseName in each root
-      function findCrossUnits(root) {
-        const result = [];
-        function walk(u) {
-          if (u.crossSpouseName) result.push(u);
-          u.childNodes.forEach(walk);
-        }
-        walk(root);
-        return result;
-      }
-
-      const crossA = findCrossUnits(roots[i]);
-      const crossB = findCrossUnits(roots[j]);
-
-      // Check if any cross-unit in A points to a member in B's tree and vice versa
-      let match = null;
-      for (const a of crossA) {
-        const aSpouseId = a.member.spouseId;
-        if (!aSpouseId || !unitMap[aSpouseId]) continue;
-        for (const b of crossB) {
-          if (b.member.id === aSpouseId) {
-            // Found a cross-couple between root i and root j
-            const sharedChildren = a.childNodes.length > 0 ? a.childNodes : b.childNodes;
-            match = { leftChild: a, rightChild: b, sharedChildren };
-            break;
-          }
-        }
-        if (match) break;
-      }
-
-      if (match) {
-        linked.add(i);
-        linked.add(j);
-        linkedGroups.push({
-          leftRoot: roots[i],
-          rightRoot: roots[j],
-          leftChild: match.leftChild,
-          rightChild: match.rightChild,
-          sharedChildren: match.sharedChildren,
-        });
-      }
-    }
-  }
-
-  // Collect every ancestor member-id reachable from the cross-couple members.
-  // These units are already drawn recursively inside LinkedBranchView's col()
-  // so rendering them again as separate floating roots causes duplicate cards.
-  const lbvAncestors = new Set();
-  function collectAncestors(id) {
-    if (!id || lbvAncestors.has(id)) return;
-    const m = byId[id]; if (!m) return;
-    lbvAncestors.add(id);
-    collectAncestors(m.parentId);
-    collectAncestors(m.parent2Id);
-  }
-  linkedGroups.forEach(g => {
-    collectAncestors(g.leftChild.member.id);
-    collectAncestors(g.rightChild.member.id);
-  });
+  const { roots, linked, linkedGroups, lbvAncestors } = computeLinkedGroups(members);
 
   // Unlinked roots: skip units already rendered inside LinkedBranchView
   const unlinkedRoots = roots.filter((_, idx) => !linked.has(idx))
@@ -1651,11 +1662,21 @@ export default function App() {
       parent2Id:m.parent2Id===id?null:m.parent2Id,
       spouseId:m.spouseId===id?null:m.spouseId,
     })));
+    // Drop any wedding/first-date entry keyed on this member — otherwise it
+    // lingers in coupleDates forever since coupleKey ids are never reused.
+    setCoupleDates(cd => {
+      const next = {};
+      for (const [key, val] of Object.entries(cd)) {
+        const [a, b] = key.split('-').map(Number);
+        if (a !== id && b !== id) next[key] = val;
+      }
+      return next;
+    });
   }
 
   // ── Backup: export / restore all family data ───────────────────────────────
   function exportBackup() {
-    const snapshot = { version:STORAGE_VERSION, exportedAt:new Date().toISOString(), members, coupleDates, nextId };
+    const snapshot = { version:STORAGE_VERSION, exportedAt:new Date().toISOString(), members, coupleDates, nextId, familyName };
     const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type:"application/json" });
     const url  = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1680,6 +1701,8 @@ export default function App() {
       setMembers(cleaned);
       setCoupleDates(data.coupleDates || {});
       setNextId(data.nextId || Math.max(0, ...cleaned.map(m=>m.id))+1);
+      // Older backups predate familyName — don't wipe the current name if it's absent.
+      if (data.familyName !== undefined) setFamilyName(data.familyName);
     };
     reader.onerror = () => alert("Couldn't read that file.");
     reader.readAsText(file);
@@ -1926,6 +1949,11 @@ export default function App() {
   const [familyNameFirstWord, ...familyNameRestWords] = familyName.split(" ");
   const familyNameRest = familyNameRestWords.join(" ");
 
+  // Members already drawn inside LinkedBranchView (see computeLinkedGroups) —
+  // that renderer can't show extra children/spouses added there, so gate the
+  // relevant LinkPicker options off for them until it supports that.
+  const lbvAncestors = treeAnchor ? computeLinkedGroups(members).lbvAncestors : null;
+
   return (
     <div style={{minHeight:"100vh",fontFamily:"var(--font-sans)",color:D.text1,position:"relative"}}>
       <FrostBackground/>
@@ -2133,7 +2161,8 @@ export default function App() {
         <LinkPicker
           anchor={treeAnchor}
           canAddParent={!treeAnchor.parentId && !treeAnchor.parent2Id}
-          canAddChild={treeAnchor.crossMarriage === true}
+          canAddSpouse={!treeAnchor.spouseId && !lbvAncestors.has(treeAnchor.id)}
+          canAddChild={!!treeAnchor.spouseId && !lbvAncestors.has(treeAnchor.id)}
           onPick={type=>setTreeLinkType(type)}
           onEdit={()=>{ setEditing(treeAnchor); closeTreeFlow(); }}
           onClose={closeTreeFlow}
